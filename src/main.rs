@@ -1,5 +1,6 @@
 #[macro_use]
 mod util;
+mod control;
 mod hid;
 mod input;
 mod window;
@@ -8,17 +9,18 @@ use std::time::{Duration, Instant};
 
 use anyhow::*;
 use clap::Clap;
-use winapi::shared::minwindef::{DWORD, LPARAM, LRESULT, TRUE, UINT, WPARAM};
+use winapi::shared::minwindef::{LPARAM, LRESULT, TRUE, UINT, WPARAM};
 use winapi::shared::ntdef::NULL;
 use winapi::shared::windef::HWND;
 use winapi::um::processthreadsapi::{GetCurrentProcess, SetPriorityClass};
 use winapi::um::winbase::HIGH_PRIORITY_CLASS;
 use winapi::um::winuser::{
     DispatchMessageW, GetMessageW, TranslateMessage, HRAWINPUT, MOUSEEVENTF_HWHEEL,
-    MOUSEEVENTF_WHEEL, MSG, WHEEL_DELTA, WM_INPUT, WM_NCCREATE,
+    MOUSEEVENTF_WHEEL, MSG, WM_INPUT, WM_NCCREATE,
 };
 
-use crate::input::{send_click, send_wheel, Event, Input, InputDevice, USAGE_PAGES};
+use crate::control::{ScrollControl, ScrollControlType};
+use crate::input::{send_click, Event, Input, InputDevice, USAGE_PAGES};
 use crate::window::{Devices, Window, WindowProc};
 
 const MAX_MIDDLE_CLICK_DURATION: Duration = Duration::from_millis(50);
@@ -32,12 +34,14 @@ enum State {
 
 struct TPMiddle {
     state: State,
+    control: Box<dyn ScrollControl>,
 }
 
 impl TPMiddle {
-    fn new() -> Result<Self> {
+    fn new(control: Box<dyn ScrollControl>) -> Result<Self> {
         Ok(TPMiddle {
             state: State::MiddleUp,
+            control,
         })
     }
 }
@@ -64,6 +68,7 @@ impl WindowProc for TPMiddle {
                 };
             }
             Event::ButtonUp => {
+                self.control.stop();
                 if let State::MiddleDown { time } = self.state {
                     let now = Instant::now();
                     if now <= time + MAX_MIDDLE_CLICK_DURATION {
@@ -77,20 +82,18 @@ impl WindowProc for TPMiddle {
                     self.state = State::Scroll;
                 }
                 if input.device == InputDevice::USB {
-                    send_wheel(MOUSEEVENTF_WHEEL, (dy as i32 * WHEEL_DELTA as i32) as DWORD);
+                    self.control.scroll(MOUSEEVENTF_WHEEL, dy);
                 }
             }
             Event::Horizontal(dx) => {
                 if let State::MiddleDown { .. } = self.state {
                     self.state = State::XClicked;
                     let button = if dx < 0 { 4 } else { 5 };
+                    self.control.stop();
                     send_click(button);
                 } else if let State::XClicked = self.state {
                     self.state = State::Scroll;
-                    send_wheel(
-                        MOUSEEVENTF_HWHEEL,
-                        (dx as i32 * WHEEL_DELTA as i32) as DWORD,
-                    );
+                    self.control.scroll(MOUSEEVENTF_HWHEEL, dx);
                 }
             }
         }
@@ -107,6 +110,9 @@ pub struct Args {
 
     #[clap(long)]
     pub fn_lock: bool,
+
+    #[clap(long, default_value = "classic")]
+    pub scroll: ScrollControlType,
 }
 
 fn try_main() -> Result<WPARAM> {
@@ -119,7 +125,7 @@ fn try_main() -> Result<WPARAM> {
 
     c_try!(SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS));
 
-    let app = TPMiddle::new()?;
+    let app = TPMiddle::new(args.scroll.create_control())?;
     let window = Window::new(app)?;
     let _devices = Devices::new(&window, &USAGE_PAGES)?;
 
