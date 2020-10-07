@@ -11,6 +11,7 @@ anyhow = "^1.0.32"
 field-offset = "^0.3.2"
 aligned = "^0.3.4"
 crossbeam-channel = "^0.4.4"
+hidapi = "^1.2.3"
 
 [dependencies.winapi]
 version = "^0.3.9"
@@ -24,4 +25,12 @@ features = [
     "errhandlingapi",
     "libloaderapi",
     "impl-default"
+]
+
+[dependencies.clap]
+version = "^3.0.0-beta.2"
+default-features = false
+features = [
+    "std",
+    "derive"
 ]

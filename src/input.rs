@@ -8,9 +8,9 @@ use winapi::um::winuser::{
     RAWINPUTHEADER, RIDI_DEVICEINFO, RID_DEVICE_INFO, RID_INPUT, RIM_TYPEHID,
 };
 
-const VID_DEVICE: DWORD = 0x17EF;
-const PID_USB: DWORD = 0x60EE;
-const PID_BT: DWORD = 0x60E1;
+pub const VID_DEVICE: DWORD = 0x17EF;
+pub const PID_USB: DWORD = 0x60EE;
+pub const PID_BT: DWORD = 0x60E1;
 
 pub const USAGE_PAGES: [USHORT; 3] = [0xFF00, 0xFF10, 0xFFA0];
 

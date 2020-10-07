@@ -1,11 +1,13 @@
 #[macro_use]
 mod util;
+mod hid;
 mod input;
 mod window;
 
 use std::time::{Duration, Instant};
 
 use anyhow::*;
+use clap::Clap;
 use winapi::shared::minwindef::{DWORD, LPARAM, LRESULT, TRUE, UINT, WPARAM};
 use winapi::shared::ntdef::NULL;
 use winapi::shared::windef::HWND;
@@ -97,12 +99,30 @@ impl WindowProc for TPMiddle {
     }
 }
 
+#[derive(Clap)]
+#[clap(version, about = "Tweak your TrackPoint Keyboard")]
+pub struct Args {
+    #[clap(short, long, default_value = "5")]
+    pub sensitivity: u8,
+
+    #[clap(long)]
+    pub fn_lock: bool,
+}
+
 fn try_main() -> Result<WPARAM> {
+    let args: Args = Args::parse();
+    if args.sensitivity < 1 || args.sensitivity > 9 {
+        bail!("--sensitivity value should be in [1, 9]");
+    }
+
+    hid::set_keyboard_features(args.sensitivity, args.fn_lock)?;
+
     c_try!(SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS));
 
     let app = TPMiddle::new()?;
     let window = Window::new(app)?;
     let _devices = Devices::new(&window, &USAGE_PAGES)?;
+
     let exit_code = unsafe {
         let mut message: MSG = Default::default();
         loop {
