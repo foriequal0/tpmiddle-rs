@@ -14,7 +14,7 @@ crossbeam-channel = "^0.4.4"
 
 [dependencies.winapi]
 version = "^0.3.9"
-features= [
+features = [
     "basetsd",
     "minwindef",
     "ntdef",
@@ -23,7 +23,5 @@ features= [
     "windef",
     "errhandlingapi",
     "libloaderapi",
-    "profileapi",
-    "processthreadsapi",
     "impl-default"
 ]

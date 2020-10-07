@@ -1,9 +1,9 @@
 use aligned::{Aligned, A8};
 use winapi::ctypes::c_int;
-use winapi::shared::minwindef::{DWORD, FALSE, LPVOID, TRUE, UINT};
+use winapi::shared::minwindef::{DWORD, LPVOID, UINT};
 use winapi::shared::ntdef::USHORT;
 use winapi::um::winuser::{
-    BlockInput, GetRawInputData, GetRawInputDeviceInfoW, SendInput, HRAWINPUT, INPUT, INPUT_MOUSE,
+    GetRawInputData, GetRawInputDeviceInfoW, SendInput, HRAWINPUT, INPUT, INPUT_MOUSE,
     MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, RAWINPUT,
     RAWINPUTHEADER, RIDI_DEVICEINFO, RID_DEVICE_INFO, RID_INPUT, RIM_TYPEHID,
 };
