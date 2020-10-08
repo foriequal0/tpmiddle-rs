@@ -10,7 +10,7 @@ fn set_sensitivity(device: &HidDevice, sensitivity: u8) -> HidResult<()> {
 
 fn set_fn_lock(device: &HidDevice, enable: bool) -> HidResult<()> {
     let code = if enable { 0x01 } else { 0x00 };
-    device.send_feature_report(&[0x13, 0x02, code, 0x00, 0x00, 0x00, 0x00, 0x00])
+    device.send_feature_report(&[0x13, 0x05, code, 0x00, 0x00, 0x00, 0x00, 0x00])
 }
 
 fn set_native_middle_button(device: &HidDevice, enable: bool) -> HidResult<()> {
