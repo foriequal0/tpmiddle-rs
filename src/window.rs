@@ -6,14 +6,15 @@ use anyhow::*;
 use winapi::_core::marker::PhantomData;
 use winapi::ctypes::wchar_t;
 use winapi::shared::basetsd::LONG_PTR;
-use winapi::shared::minwindef::{FALSE, HINSTANCE, INT, LPARAM, LRESULT, UINT, WPARAM};
+use winapi::shared::minwindef::{FALSE, HINSTANCE, INT, LPARAM, LRESULT, TRUE, UINT, WPARAM};
 use winapi::shared::ntdef::{LPCWSTR, LPWSTR, NULL, USHORT};
 use winapi::shared::windef::{HMENU, HWND};
 use winapi::um::libloaderapi::GetModuleHandleW;
+use winapi::um::wincon::GetConsoleWindow;
 use winapi::um::winuser::{
-    CreateWindowExW, DestroyWindow, GetWindowLongPtrW, RegisterClassExW, RegisterRawInputDevices,
-    SetWindowLongPtrW, UnregisterClassW, HWND_MESSAGE, RAWINPUTDEVICE, RIDEV_INPUTSINK,
-    RIDEV_REMOVE, WNDCLASSEXW,
+    CreateWindowExW, DestroyWindow, GetWindowLongPtrW, IsWindowVisible, RegisterClassExW,
+    RegisterRawInputDevices, SetWindowLongPtrW, ShowWindow, UnregisterClassW, HWND_MESSAGE,
+    RAWINPUTDEVICE, RIDEV_INPUTSINK, RIDEV_REMOVE, SW_HIDE, WNDCLASSEXW,
 };
 
 pub struct Window<T> {
@@ -47,6 +48,13 @@ impl<T: WindowProc> Window<T> {
             long_ptr_set: false,
             _phantom: Default::default(),
         };
+
+        unsafe {
+            let console = GetConsoleWindow();
+            if IsWindowVisible(console) == TRUE {
+                ShowWindow(console, SW_HIDE);
+            }
+        }
 
         let mut proc = Box::new(proc);
         c_try_nonnull!(SetWindowLongPtrW(hwnd, 0, proc.as_mut() as *mut T as isize));

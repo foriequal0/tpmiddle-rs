@@ -22,6 +22,7 @@ features = [
     "winbase",
     "winuser",
     "windef",
+    "wincon",
     "errhandlingapi",
     "libloaderapi",
     "impl-default"
