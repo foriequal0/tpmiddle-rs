@@ -40,10 +40,7 @@ Download `tpmiddle-rs.exe` and make a shortcut to Startup folder.
 1. Press **Ok** button to save the shortcut.
 1. You can activate it now by double clicking the shortcut without reboot.
 
-## How to restore
-
-It overrides the keyboard configurations on its startup.
-You can restore it by removing `tpmiddle-rs.exe` and reinstalling ThinkPad TrackPoint Keyboard software.
+## How to remove
 
 1. Terminate `tpmiddle-rs.exe`
    1. Press **Alt + Ctrl + Delete**, click **Task Manager**
@@ -52,4 +49,5 @@ You can restore it by removing `tpmiddle-rs.exe` and reinstalling ThinkPad Track
 1. Remove `tpmiddle-rs.exe`
    1. Remove the shortcut from Startup folder.
    1. Remove `tpmiddle-rs.exe`.
-1. Reinstall ThinkPad TrackPoint Keyboard softare.
+1. Pull the USB dongle, and put it again.
+1. Reinstall ThinkPad TrackPoint Keyboard software if you want.
