@@ -105,23 +105,38 @@ impl WindowProc for TPMiddle {
 #[derive(Clap)]
 #[clap(version, about = "Tweak your TrackPoint Keyboard")]
 pub struct Args {
-    #[clap(short, long, default_value = "5")]
-    pub sensitivity: u8,
+    #[clap(short, long)]
+    pub sensitivity: Option<u8>,
 
     #[clap(long)]
     pub fn_lock: bool,
+    #[clap(long, hidden(true))]
+    pub no_fn_lock: bool,
 
     #[clap(long, default_value = "classic")]
     pub scroll: ScrollControlType,
 }
 
+impl Args {
+    fn fn_lock(&self) -> Result<Option<bool>> {
+        match (self.fn_lock, self.no_fn_lock) {
+            (true, true) => {
+                bail!("Error: Flag 'fn-lock' and 'no-fn-lock' cannot be used simultaneously",);
+            }
+            (true, _) => Ok(Some(true)),
+            (_, true) => Ok(Some(false)),
+            _ => Ok(None),
+        }
+    }
+}
+
 fn try_main() -> Result<WPARAM> {
     let args: Args = Args::parse();
-    if args.sensitivity < 1 || args.sensitivity > 9 {
+    if args.sensitivity.is_some() && args.sensitivity < Some(1) || args.sensitivity > Some(9) {
         bail!("--sensitivity value should be in [1, 9]");
     }
 
-    hid::set_keyboard_features(args.sensitivity, args.fn_lock)?;
+    hid::set_keyboard_features(args.sensitivity, args.fn_lock()?)?;
 
     c_try!(SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS));
 

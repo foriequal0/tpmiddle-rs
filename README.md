@@ -16,7 +16,7 @@ You only need a `tpmiddle-rs.exe`.
 
 It sends commands to the keyboard on its startup to set following configurations:
 
-  * `--fn-lock` enables fn lock (disables without it).
+  * `--fn-lock` enables fn lock (`--no-fn-lock` to disable it).
   * `--sensitivity 1-9` sets TrackPoint sensitivity.
 
 ### Smooth scrolling (Experimental)
