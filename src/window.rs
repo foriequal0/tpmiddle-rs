@@ -98,7 +98,6 @@ extern "system" fn window_proc<T: WindowProc>(
 }
 
 struct WindowClass<T> {
-    _name: Box<[wchar_t]>,
     class: WNDCLASSEXW,
     atom: LPCWSTR,
     _phantom: PhantomData<T>,
@@ -121,7 +120,6 @@ impl<T: WindowProc> WindowClass<T> {
         let atom = c_try_nonnull!(RegisterClassExW(&class));
 
         Ok(Self {
-            _name: name,
             class,
             atom: atom as LPCWSTR,
             _phantom: Default::default(),
