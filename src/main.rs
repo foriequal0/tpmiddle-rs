@@ -20,7 +20,7 @@ use winapi::um::winuser::{
 };
 
 use crate::control::{ScrollControl, ScrollControlType};
-use crate::input::{send_click, Event, Input, InputDevice, USAGE_PAGES};
+use crate::input::{send_click, Event, Input, USAGE_PAGES};
 use crate::window::{Devices, Window, WindowProc};
 
 const MAX_MIDDLE_CLICK_DURATION: Duration = Duration::from_millis(50);
@@ -29,7 +29,6 @@ enum State {
     MiddleUp,
     MiddleDown { time: Instant },
     Scroll,
-    XClicked,
 }
 
 struct TPMiddle {
@@ -78,23 +77,11 @@ impl WindowProc for TPMiddle {
                 self.state = State::MiddleUp;
             }
             Event::Vertical(dy) => {
-                if let State::XClicked = self.state {
-                    self.state = State::Scroll;
-                }
-                if input.device == InputDevice::USB {
-                    self.control.scroll(MOUSEEVENTF_WHEEL, dy);
-                }
+                self.control.scroll(MOUSEEVENTF_WHEEL, dy);
             }
             Event::Horizontal(dx) => {
-                if let State::MiddleDown { .. } = self.state {
-                    self.state = State::XClicked;
-                    let button = if dx < 0 { 4 } else { 5 };
-                    self.control.stop();
-                    send_click(button);
-                } else if let State::XClicked = self.state {
-                    self.state = State::Scroll;
-                    self.control.scroll(MOUSEEVENTF_HWHEEL, dx);
-                }
+                self.state = State::Scroll;
+                self.control.scroll(MOUSEEVENTF_HWHEEL, dx);
             }
         }
 
