@@ -229,32 +229,26 @@ mod smooth {
                     *buffer -= drain;
                     *reservoir += drain;
 
-                    // Snappier stop for fast feeds (multiplier >> 1.0),
-                    // smoother decay for slow feeds (multiplier ~= 1.0).
-                    let snappy_coefficient = {
-                        let rate = feed_rate
-                            .get(LINEAR_DECAY_DURATION_SECS)
-                            // To prevent div by 0
-                            .max(MIN_FEED_INTERVAL_SECS);
-                        (LINEAR_DECAY_DURATION_SECS / rate).sqrt()
-                    };
+                    let rate = feed_rate
+                        .get(LINEAR_DECAY_DURATION_SECS)
+                        // To prevent div by 0
+                        .max(MIN_FEED_INTERVAL_SECS);
 
-                    const MIN_DECAY_RATE: f32 =
-                        WHEEL_TICK_INTERVAL_SECS / LINEAR_DECAY_DURATION_SECS;
+                    let decay_rate = WHEEL_TICK_INTERVAL_SECS / rate;
 
                     if *buffer <= 0.1 && *decay == Decay::AutomaticExponential {
                         // The buffer is depleted. We assumes that the scrolling is stopped.
                         // The reservoir will be depleted in LINEAR_DECAY_DURATION_SECS linearly.
                         // We snapshot the linear decay rate based on the current reservoir value.
                         *decay = Decay::SnapshotLinear {
-                            rate: *reservoir * MIN_DECAY_RATE * snappy_coefficient,
+                            rate: *reservoir * decay_rate,
                         };
                     }
 
                     let amount = if let Decay::SnapshotLinear { rate } = decay {
                         rate.min(*reservoir)
                     } else {
-                        *reservoir * MIN_DECAY_RATE * snappy_coefficient
+                        *reservoir * decay_rate
                     };
                     *reservoir -= amount;
 
@@ -308,7 +302,7 @@ mod smooth {
         }
 
         fn feed(&mut self, now: Instant) {
-            const MOVING_AVG_COEFF: f32 = 0.1;
+            const MOVING_AVG_COEFF: f32 = 0.5;
 
             let diff = (now - self.prev).as_secs_f32();
             self.value = if let Some(value) = self.value {
