@@ -72,6 +72,8 @@ mod smooth {
     /// Time to stop scrolling.
     const LINEAR_DECAY_DURATION_SECS: f32 = 0.3;
 
+    const KICKSTART_DELTA: f32 = 0.2;
+
     pub struct SmoothController {
         sender: Option<Sender<Event>>,
         join_handle: Option<JoinHandle<()>>,
@@ -176,8 +178,15 @@ mod smooth {
                     feed_rate,
                     ..
                 } if *prev_event == event && *scroll_direction as i8 == delta.signum() => {
+                    let kickstart_lerp = lerp(
+                        feed_rate.get(LINEAR_DECAY_DURATION_SECS),
+                        MIN_FEED_INTERVAL_SECS,
+                        LINEAR_DECAY_DURATION_SECS,
+                        1.0,
+                        KICKSTART_DELTA,
+                    );
                     feed_rate.feed(now);
-                    *buffer += delta.abs() as f32;
+                    *buffer += delta.abs() as f32 * kickstart_lerp;
                     *decay = Decay::AutomaticExponential;
                     false
                 }
@@ -185,7 +194,7 @@ mod smooth {
                     *self = State::Scrolling {
                         event,
                         scroll_direction: delta.signum() as f32,
-                        buffer: delta.abs() as f32,
+                        buffer: delta.abs() as f32 * KICKSTART_DELTA,
                         decay: Decay::AutomaticExponential,
                         reservoir: 0.0,
                         error: 0.0,
@@ -313,6 +322,23 @@ mod smooth {
 
         fn get(&self, max: f32) -> f32 {
             self.value.unwrap_or(max).min(max)
+        }
+    }
+
+    fn lerp(x: f32, in_from: f32, in_to: f32, out_from: f32, out_to: f32) -> f32 {
+        let in_range = in_to - in_from;
+        let out_range = out_to - out_from;
+        let min = out_from.min(out_to);
+        let max = out_from.max(out_to);
+
+        let result = (x - in_from) / in_range * out_range + out_from;
+
+        if result < min {
+            min
+        } else if result > max {
+            max
+        } else {
+            result
         }
     }
 }
