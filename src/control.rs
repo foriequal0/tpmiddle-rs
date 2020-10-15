@@ -186,7 +186,7 @@ mod smooth {
                         KICKSTART_DELTA,
                     );
                     feed_rate.feed(now);
-                    *buffer += kickstart_lerp;
+                    *buffer += delta.abs() as f32 * kickstart_lerp;
                     *decay = Decay::AutomaticExponential;
                     false
                 }
@@ -194,7 +194,7 @@ mod smooth {
                     *self = State::Scrolling {
                         event,
                         scroll_direction: delta.signum() as f32,
-                        buffer: KICKSTART_DELTA,
+                        buffer: delta.abs() as f32 * KICKSTART_DELTA,
                         decay: Decay::AutomaticExponential,
                         reservoir: 0.0,
                         error: 0.0,
