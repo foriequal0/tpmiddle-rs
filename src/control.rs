@@ -71,6 +71,7 @@ mod smooth {
 
     /// Slowest time to stop scrolling.
     const MAX_DECAY_DURATION_SECS: f32 = 0.3;
+    const DECAY_REDUCTION_RATE: f32 = 0.7;
 
     const KICKSTART_DELTA: f32 = 0.2;
 
@@ -297,7 +298,8 @@ mod smooth {
                     *buffer -= drain;
                     *reservoir = (*reservoir + drain).min(feed_rate.moving_avg());
 
-                    let decay_rate = WHEEL_TICK_INTERVAL_SECS / feed_rate.interval();
+                    let decay_rate =
+                        WHEEL_TICK_INTERVAL_SECS / feed_rate.interval() * DECAY_REDUCTION_RATE;
 
                     if *buffer <= 0.1 && *decay == Decay::AutomaticExponential {
                         // The buffer is depleted. We assumes that the scrolling is stopped.
