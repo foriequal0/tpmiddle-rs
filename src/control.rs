@@ -86,7 +86,13 @@ mod smooth {
             let mut wheel_tick = never();
             let join_handle = spawn(move || loop {
                 crossbeam_channel::select! {
-                    recv(wheel_tick) -> _ => {}
+                    recv(wheel_tick) -> _ => {
+                        if let Some(wheel) = state.tick() {
+                            send_wheel(wheel.event, wheel.mouse_data);
+                        } else {
+                            wheel_tick = never();
+                        }
+                    }
                     recv(receiver) -> event => {
                         match event {
                             Ok(Event::Scroll { event, delta }) => {
@@ -105,12 +111,6 @@ mod smooth {
                         }
                     }
                 };
-
-                if let Some(wheel) = state.tick() {
-                    send_wheel(wheel.event, wheel.mouse_data);
-                } else {
-                    wheel_tick = never();
-                }
             });
             Self {
                 sender: Some(sender),
