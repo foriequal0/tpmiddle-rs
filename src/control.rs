@@ -229,12 +229,13 @@ mod smooth {
                     *buffer -= drain;
                     *reservoir += drain;
 
-                    let rate = feed_rate
-                        .get(LINEAR_DECAY_DURATION_SECS)
-                        // To prevent div by 0
-                        .max(MIN_FEED_INTERVAL_SECS);
-
-                    let decay_rate = WHEEL_TICK_INTERVAL_SECS / rate;
+                    let decay_rate = {
+                        let rate = feed_rate
+                            .get(LINEAR_DECAY_DURATION_SECS)
+                            // To prevent div by 0
+                            .max(MIN_FEED_INTERVAL_SECS);
+                        WHEEL_TICK_INTERVAL_SECS / rate
+                    };
 
                     if *buffer <= 0.1 && *decay == Decay::AutomaticExponential {
                         // The buffer is depleted. We assumes that the scrolling is stopped.
