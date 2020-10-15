@@ -43,22 +43,15 @@ jobs:
 
   build:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        configuration:
-        - name: debug
-          flag:
-        - name: release
-          flag: --release
     steps:
     - uses: actions/checkout@v1
     - uses: actions-rs/toolchain@v1.0.5
       with:
         profile: minimal
     - run: cargo fetch --verbose
-    - run: cargo build ${{ matrix.configuration.flag }}
+    - run: cargo build
     - name: Archive
-      working-directory: target/${{ matrix.configuration.name }}
+      working-directory: target/debug
       run: |
         $VERSION=$($(./tpmiddle-rs.exe --version).split( )[1])
         echo "VERSION=$VERSION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8
@@ -72,5 +65,5 @@ jobs:
         $(Get-FileHash 'tpmiddle-rs.exe').Hash | tee artifacts/sha256sums
     - uses: actions/upload-artifact@v1
       with:
-        name: tpmiddle-rs-${{env.VERSION}}-${{ matrix.configuration.name }}
-        path: target/${{ matrix.configuration.name }}/artifacts/
+        name: tpmiddle-rs-${{env.VERSION}}-debug
+        path: target/debug/artifacts/

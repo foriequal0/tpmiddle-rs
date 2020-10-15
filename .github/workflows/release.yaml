@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+    - v*
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+    - uses: actions/checkout@v1
+    - uses: actions-rs/toolchain@v1.0.5
+      with:
+        profile: minimal
+    - run: cargo fetch --verbose
+    - run: cargo build --release
+    - name: Archive
+      working-directory: target/release
+      run: |
+        $VERSION=$($(./tpmiddle-rs.exe --version).split( )[1])
+        $ARCHIVE="tpmiddle-rs-$VERSION.zip"
+        echo "VERSION=$VERSION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8
+        echo "ARCHIVE=$ARCHIVE" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+
+        if (Test-Path "artifacts") {
+          rm -Recurse -Force artifacts
+        }
+        mkdir artifacts/tpmiddle-rs/
+        cp 'tpmiddle-rs.exe' artifacts/tpmiddle-rs/
+        echo '${{github.sha}} ${{github.ref}}' | tee artifacts/tpmiddle-rs/git-ref
+        $(Get-FileHash 'tpmiddle-rs.exe').Hash | tee artifacts/tpmiddle-rs/sha256sums
+
+        Compress-Archive -Path artifacts/tpmiddle-rs/ -DestinationPath artifacts/$ARCHIVE
+    - uses: actions/upload-artifact@v1
+      with:
+        name: tpmiddle-rs-${{env.VERSION}}
+        path: target/release/artifacts/tpmiddle-rs/
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: true
+        prerelease: true
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: target/release/artifacts/${{env.ARCHIVE}}
+        asset_name: ${{env.ARCHIVE}}
+        asset_content_type: application/zip
