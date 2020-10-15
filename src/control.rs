@@ -55,15 +55,15 @@ mod smooth {
     use super::*;
 
     use std::thread::{spawn, JoinHandle};
-    use std::time::{Duration, Instant};
+    use std::time::Instant;
 
-    use crossbeam_channel::{bounded, never, tick, Sender};
+    use crossbeam_channel::{bounded, Receiver, Sender, TryRecvError};
+    use spin_sleep::LoopHelper;
 
     // Empirically found min feed interval
     const MIN_FEED_INTERVAL_SECS: f32 = 0.015;
 
-    const WHEEL_TICK_FREQ: u64 = 60;
-    const WHEEL_TICK_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / WHEEL_TICK_FREQ);
+    const WHEEL_TICK_FREQ: u64 = 120;
     const WHEEL_TICK_INTERVAL_SECS: f32 = 1.0 / WHEEL_TICK_FREQ as f32;
 
     /// Time to fully drain the buffer into the reservoir.
@@ -81,16 +81,16 @@ mod smooth {
 
     impl SmoothController {
         pub fn new() -> Self {
+            let ticker = Ticker::new(WHEEL_TICK_FREQ);
             let (sender, receiver) = bounded(1);
             let mut state = State::Nop;
-            let mut wheel_tick = never();
             let join_handle = spawn(move || loop {
                 crossbeam_channel::select! {
-                    recv(wheel_tick) -> _ => {
+                    recv(ticker.receiver) -> _ => {
                         if let Some(wheel) = state.tick() {
                             send_wheel(wheel.event, wheel.mouse_data);
                         } else {
-                            wheel_tick = never();
+                            ticker.stop();
                         }
                     }
                     recv(receiver) -> event => {
@@ -98,12 +98,12 @@ mod smooth {
                             Ok(Event::Scroll { event, delta }) => {
                                 let now = Instant::now();
                                 if state.feed(now, event, delta) {
-                                    wheel_tick = tick(WHEEL_TICK_INTERVAL);
+                                    ticker.resume();
                                 }
                             }
                             Ok(Event::Stop) => {
-                                state =  State::Nop;
-                                wheel_tick = never();
+                                state = State::Nop;
+                                ticker.stop();
                             }
                             Err(_) => {
                                 break;
@@ -136,6 +136,74 @@ mod smooth {
     }
 
     impl Drop for SmoothController {
+        fn drop(&mut self) {
+            std::mem::drop(self.sender.take());
+            if let Some(join_handle) = self.join_handle.take() {
+                join_handle.join().expect("Smooth scrolling thread is dead");
+            }
+        }
+    }
+
+    struct Ticker {
+        receiver: Receiver<()>,
+        sender: Option<Sender<TickerCommand>>,
+        join_handle: Option<JoinHandle<()>>,
+    }
+
+    enum TickerCommand {
+        Start,
+        Stop,
+    }
+
+    impl Ticker {
+        fn new(freq: u64) -> Self {
+            let (ticker_sender, ticker_receiver) = bounded(1);
+            let (command_sender, command_receiver) = bounded(1);
+            let join_handle = spawn(move || 'thread: loop {
+                loop {
+                    match command_receiver.recv() {
+                        Ok(TickerCommand::Start) => break,
+                        Err(_) => break 'thread,
+                        _ => {}
+                    }
+                }
+
+                let mut helper = LoopHelper::builder().build_with_target_rate(freq as f32);
+                loop {
+                    helper.loop_start();
+                    helper.loop_sleep();
+                    match command_receiver.try_recv() {
+                        Ok(TickerCommand::Stop) => break,
+                        Err(TryRecvError::Disconnected) => break 'thread,
+                        _ => {}
+                    }
+                    ticker_sender.send(()).expect("Ticker receiver is dead");
+                }
+            });
+
+            Self {
+                receiver: ticker_receiver,
+                sender: Some(command_sender),
+                join_handle: Some(join_handle),
+            }
+        }
+
+        fn resume(&self) {
+            let sender = self.sender.as_ref().unwrap();
+            sender
+                .send(TickerCommand::Start)
+                .expect("Ticker thread is dead");
+        }
+
+        fn stop(&self) {
+            let sender = self.sender.as_ref().unwrap();
+            sender
+                .send(TickerCommand::Stop)
+                .expect("Ticker thread is dead");
+        }
+    }
+
+    impl Drop for Ticker {
         fn drop(&mut self) {
             std::mem::drop(self.sender.take());
             if let Some(join_handle) = self.join_handle.take() {

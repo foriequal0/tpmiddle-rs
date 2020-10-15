@@ -12,6 +12,7 @@ field-offset = "^0.3.2"
 aligned = "^0.3.4"
 crossbeam-channel = "^0.4.4"
 hidapi = "^1.2.3"
+spin_sleep = "^1.0.0"
 
 [dependencies.winapi]
 version = "^0.3.9"
