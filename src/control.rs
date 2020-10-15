@@ -69,8 +69,8 @@ mod smooth {
     /// Time to fully drain the buffer into the reservoir.
     const BUFFER_MAX_DRAIN_DURATION_SECS: f32 = 0.05;
 
-    /// Time to stop scrolling.
-    const LINEAR_DECAY_DURATION_SECS: f32 = 0.3;
+    /// Slowest time to stop scrolling.
+    const MAX_DECAY_DURATION_SECS: f32 = 0.3;
 
     const KICKSTART_DELTA: f32 = 0.2;
 
@@ -247,13 +247,13 @@ mod smooth {
                     ..
                 } if *prev_event == event && *scroll_direction as i8 == delta.signum() => {
                     let kickstart_lerp = lerp(
-                        feed_rate.get(LINEAR_DECAY_DURATION_SECS),
+                        feed_rate.interval(),
                         MIN_FEED_INTERVAL_SECS,
-                        LINEAR_DECAY_DURATION_SECS,
+                        MAX_DECAY_DURATION_SECS,
                         1.0,
                         KICKSTART_DELTA,
                     );
-                    feed_rate.feed(now);
+                    feed_rate.feed(now, delta.abs() as f32);
                     *buffer += delta.abs() as f32 * kickstart_lerp;
                     *decay = Decay::AutomaticExponential;
                     false
@@ -295,15 +295,9 @@ mod smooth {
                         BUFFER_MIN_DRAIN_PER_TICK.min(*buffer)
                     };
                     *buffer -= drain;
-                    *reservoir += drain;
+                    *reservoir = (*reservoir + drain).min(feed_rate.moving_avg());
 
-                    let decay_rate = {
-                        let rate = feed_rate
-                            .get(LINEAR_DECAY_DURATION_SECS)
-                            // To prevent div by 0
-                            .max(MIN_FEED_INTERVAL_SECS);
-                        WHEEL_TICK_INTERVAL_SECS / rate
-                    };
+                    let decay_rate = WHEEL_TICK_INTERVAL_SECS / feed_rate.interval();
 
                     if *buffer <= 0.1 && *decay == Decay::AutomaticExponential {
                         // The buffer is depleted. We assumes that the scrolling is stopped.
@@ -358,6 +352,7 @@ mod smooth {
 
     #[derive(Debug)]
     struct FeedRate {
+        interval: Option<f32>,
         value: Option<f32>,
         prev: Instant,
     }
@@ -365,26 +360,40 @@ mod smooth {
     impl FeedRate {
         fn new(now: Instant) -> Self {
             Self {
+                interval: None,
                 value: None,
                 prev: now,
             }
         }
 
-        fn feed(&mut self, now: Instant) {
+        fn feed(&mut self, now: Instant, delta: f32) {
             const MOVING_AVG_COEFF: f32 = 0.5;
 
             let diff = (now - self.prev).as_secs_f32();
-            self.value = if let Some(value) = self.value {
-                Some(value * (1.0 - MOVING_AVG_COEFF) + diff * MOVING_AVG_COEFF)
+            self.interval = if let Some(interval) = self.interval {
+                Some(interval * (1.0 - MOVING_AVG_COEFF) + diff * MOVING_AVG_COEFF)
             } else {
                 Some(diff)
+            };
+
+            self.value = if let Some(value) = self.value {
+                Some(value * (1.0 - MOVING_AVG_COEFF) + delta * MOVING_AVG_COEFF)
+            } else {
+                Some(delta)
             };
 
             self.prev = now;
         }
 
-        fn get(&self, max: f32) -> f32 {
-            self.value.unwrap_or(max).min(max)
+        fn interval(&self) -> f32 {
+            self.interval
+                .unwrap_or(MAX_DECAY_DURATION_SECS)
+                .min(MAX_DECAY_DURATION_SECS)
+                .max(MIN_FEED_INTERVAL_SECS)
+        }
+
+        fn moving_avg(&self) -> f32 {
+            self.value.unwrap_or(1.0) / self.interval()
         }
     }
 
