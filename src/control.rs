@@ -62,7 +62,7 @@ mod smooth {
     // Empirically found min feed interval
     const MIN_FEED_INTERVAL_SECS: f32 = 0.015;
 
-    const WHEEL_TICK_FREQ: u64 = 120;
+    const WHEEL_TICK_FREQ: u64 = 60;
     const WHEEL_TICK_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / WHEEL_TICK_FREQ);
     const WHEEL_TICK_INTERVAL_SECS: f32 = 1.0 / WHEEL_TICK_FREQ as f32;
 
