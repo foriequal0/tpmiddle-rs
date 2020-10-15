@@ -123,6 +123,7 @@ fn try_main() -> Result<WPARAM> {
         bail!("--sensitivity value should be in [1, 9]");
     }
 
+    println!("Initializing...");
     hid::set_keyboard_features(args.sensitivity, args.fn_lock()?)?;
 
     c_try!(SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS));
@@ -131,6 +132,7 @@ fn try_main() -> Result<WPARAM> {
     let window = Window::new(app)?;
     let _devices = Devices::new(&window, &USAGE_PAGES)?;
 
+    println!("Started!");
     let exit_code = unsafe {
         let mut message: MSG = Default::default();
         loop {
