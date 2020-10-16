@@ -71,7 +71,6 @@ mod smooth {
 
     /// Slowest time to stop scrolling.
     const MAX_DECAY_DURATION_SECS: f32 = 0.3;
-    const DECAY_REDUCTION_RATE: f32 = 0.7;
 
     const KICKSTART_DELTA: f32 = 0.2;
 
@@ -298,20 +297,29 @@ mod smooth {
                     *buffer -= drain;
                     *reservoir = (*reservoir + drain).min(feed_rate.moving_avg());
 
-                    let decay_rate =
-                        WHEEL_TICK_INTERVAL_SECS / feed_rate.interval() * DECAY_REDUCTION_RATE;
+                    let feed_interval = feed_rate.interval();
+                    let decay_rate = WHEEL_TICK_INTERVAL_SECS / feed_interval;
 
                     if *buffer <= 0.1 && *decay == Decay::AutomaticExponential {
                         // The buffer is depleted. We assumes that the scrolling is stopped.
-                        // The reservoir will be depleted in LINEAR_DECAY_DURATION_SECS linearly.
-                        // We snapshot the linear decay rate based on the current reservoir value.
-                        *decay = Decay::SnapshotLinear {
-                            rate: *reservoir * decay_rate,
+                        // To prevent long-tail of exponential decay, we'll decay it quadratically
+                        // with linearly decreasing decay amount over feed_interval * 2
+                        // (total amount should be `*reservoir`)
+                        *decay = Decay::Quadratic {
+                            amount: *reservoir * decay_rate,
+                            decreasing_rate: *reservoir * decay_rate
+                                / (feed_interval * 2.0 * WHEEL_TICK_FREQ as f32),
                         };
                     }
 
-                    let amount = if let Decay::SnapshotLinear { rate } = decay {
-                        rate.min(*reservoir)
+                    let amount = if let Decay::Quadratic {
+                        amount,
+                        decreasing_rate,
+                    } = decay
+                    {
+                        let result = amount.min(*reservoir);
+                        *amount -= decreasing_rate.min(*amount);
+                        result
                     } else {
                         *reservoir * decay_rate
                     };
@@ -329,8 +337,7 @@ mod smooth {
                         delta as DWORD
                     };
 
-                    // Cut the long-tail.
-                    if *reservoir < 1.0 / WHEEL_DELTA as f32 {
+                    if *reservoir == 0.0 || amount == 0.0 && *error < 1.0 {
                         *self = State::Nop;
                     }
 
@@ -343,7 +350,7 @@ mod smooth {
 
     #[derive(Debug, PartialEq)]
     enum Decay {
-        SnapshotLinear { rate: f32 },
+        Quadratic { amount: f32, decreasing_rate: f32 },
         AutomaticExponential,
     }
 
