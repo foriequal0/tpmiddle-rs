@@ -62,15 +62,14 @@ mod smooth {
 
     // Empirically found min feed interval
     const MIN_FEED_INTERVAL_SECS: f32 = 0.015;
+    // Treat feed intervals greater than this as a separate wheel event
+    const MAX_FEED_INTERVAL_SECS: f32 = 0.3;
 
     const WHEEL_TICK_FREQ: u64 = 120;
     const WHEEL_TICK_INTERVAL_SECS: f32 = 1.0 / WHEEL_TICK_FREQ as f32;
 
     /// Time to fully drain the buffer into the reservoir.
     const BUFFER_MAX_DRAIN_DURATION_SECS: f32 = 0.05;
-
-    /// Slowest time to stop scrolling.
-    const MAX_DECAY_DURATION_SECS: f32 = 0.3;
 
     pub struct SmoothController {
         sender: Option<Sender<Event>>,
@@ -304,9 +303,11 @@ mod smooth {
 
                     if *buffer == 0.0 && *decay == Decay::AutomaticExponential {
                         // The buffer is depleted. We assumes that the scrolling is stopped.
-                        // To prevent long-tail of exponential decay, we'll decay it quadratically
-                        // with linearly decreasing decay amount over feed_interval * 2
-                        // (total amount should be `*reservoir`)
+                        // To prevent long-tail of exponential decay, we'll decay `reservoir` quadratically.
+                        // with linearly decreasing decay amount over `feed_interval * 2`
+                        // (total sum of `amount` would be `*reservoir`)
+                        // It means that the next wheel event might arrive before `reservoir` is depleted.
+                        // But it'll leave a small window for jittery wheel events to continue the scroll.
                         *decay = Decay::Quadratic {
                             amount: *reservoir * decay_rate,
                             decreasing_rate: *reservoir * decay_rate
@@ -398,8 +399,8 @@ mod smooth {
 
         fn interval(&self) -> f32 {
             self.interval
-                .unwrap_or(MAX_DECAY_DURATION_SECS)
-                .min(MAX_DECAY_DURATION_SECS)
+                .unwrap_or(MAX_FEED_INTERVAL_SECS)
+                .min(MAX_FEED_INTERVAL_SECS)
                 .max(MIN_FEED_INTERVAL_SECS)
         }
 
