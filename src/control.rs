@@ -72,8 +72,6 @@ mod smooth {
     /// Slowest time to stop scrolling.
     const MAX_DECAY_DURATION_SECS: f32 = 0.3;
 
-    const KICKSTART_DELTA: f32 = 0.2;
-
     pub struct SmoothController {
         sender: Option<Sender<Event>>,
         join_handle: Option<JoinHandle<()>>,
@@ -246,23 +244,22 @@ mod smooth {
                     feed_rate,
                     ..
                 } if *prev_event == event && *scroll_direction as i8 == delta.signum() => {
-                    let kickstart_lerp = lerp(
-                        feed_rate.interval(),
-                        MIN_FEED_INTERVAL_SECS,
-                        MAX_DECAY_DURATION_SECS,
-                        1.0,
-                        KICKSTART_DELTA,
-                    );
                     feed_rate.feed(now, delta.abs() as f32);
-                    *buffer += delta.abs() as f32 * kickstart_lerp;
+                    // To enable more precise wheel speed control, nudge the delta when the pressure is low,
+                    // High pressure -> faster feed rate -> nudge ~ 1.0 (for a narrower range)
+                    // Low pressure -> Slower feed rate -> nudge < 1.0 (for a broader range)
+                    let nudge = (MIN_FEED_INTERVAL_SECS / feed_rate.interval()).sqrt();
+                    let value = delta.abs() as f32 * nudge;
+                    *buffer += value;
                     *decay = Decay::AutomaticExponential;
                     false
                 }
                 _ => {
+                    let initial_nudge = (MIN_FEED_INTERVAL_SECS / MAX_FEED_INTERVAL_SECS).sqrt();
                     *self = State::Scrolling {
                         event,
                         scroll_direction: delta.signum() as f32,
-                        buffer: delta.abs() as f32 * KICKSTART_DELTA,
+                        buffer: delta.abs() as f32 * initial_nudge,
                         decay: Decay::AutomaticExponential,
                         reservoir: 0.0,
                         error: 0.0,
@@ -403,23 +400,6 @@ mod smooth {
 
         fn moving_avg(&self) -> f32 {
             self.value.unwrap_or(1.0) / self.interval()
-        }
-    }
-
-    fn lerp(x: f32, in_from: f32, in_to: f32, out_from: f32, out_to: f32) -> f32 {
-        let in_range = in_to - in_from;
-        let out_range = out_to - out_from;
-        let min = out_from.min(out_to);
-        let max = out_from.max(out_to);
-
-        let result = (x - in_from) / in_range * out_range + out_from;
-
-        if result < min {
-            min
-        } else if result > max {
-            max
-        } else {
-            result
         }
     }
 }
