@@ -302,7 +302,7 @@ mod smooth {
                     let feed_interval = feed_rate.interval();
                     let decay_rate = WHEEL_TICK_INTERVAL_SECS / feed_interval;
 
-                    if *buffer <= 0.1 && *decay == Decay::AutomaticExponential {
+                    if *buffer == 0.0 && *decay == Decay::AutomaticExponential {
                         // The buffer is depleted. We assumes that the scrolling is stopped.
                         // To prevent long-tail of exponential decay, we'll decay it quadratically
                         // with linearly decreasing decay amount over feed_interval * 2
