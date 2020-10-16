@@ -292,7 +292,12 @@ mod smooth {
                         BUFFER_MIN_DRAIN_PER_TICK.min(*buffer)
                     };
                     *buffer -= drain;
-                    *reservoir = (*reservoir + drain).min(feed_rate.moving_avg());
+                    *reservoir += drain;
+                    if drain > 0.0 {
+                        // Capping reservoir with `feed_rate` prevents `reservoir` grows indefinitely.
+                        // `reservoir` might decay slower than the `feed_rate`.
+                        *reservoir = reservoir.min(feed_rate.moving_avg());
+                    }
 
                     let feed_interval = feed_rate.interval();
                     let decay_rate = WHEEL_TICK_INTERVAL_SECS / feed_interval;
