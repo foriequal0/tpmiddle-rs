@@ -29,7 +29,7 @@ You can set scrolling controller by passing `--scroll <controller>` options to t
 
 ## How to install
 
-Download `tpmiddle-rs.exe` and make a shortcut to Startup folder.
+Download `tpmiddle-rs.exe` here https://github.com/foriequal0/tpmiddle-rs/releases and make a shortcut to Startup folder.
 
 1. Remove ThinkPad TrackPoint Keyboard software and reboot.
 1. Press **Win + R** key, type **shell:startup**, then select **OK**. Startup folder will show up.
