@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 anyhow = "^1.0.32"
+thiserror = "^1.0.21"
 field-offset = "^0.3.2"
 aligned = "^0.3.4"
 crossbeam-channel = "^0.4.4"
