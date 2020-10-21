@@ -7,7 +7,7 @@ use winapi::_core::marker::PhantomData;
 use winapi::ctypes::wchar_t;
 use winapi::shared::basetsd::LONG_PTR;
 use winapi::shared::minwindef::{FALSE, HINSTANCE, INT, LPARAM, LRESULT, TRUE, UINT, WPARAM};
-use winapi::shared::ntdef::{LPCWSTR, LPWSTR, NULL, USHORT};
+use winapi::shared::ntdef::{LPCWSTR, LPWSTR, NULL};
 use winapi::shared::windef::{HMENU, HWND};
 use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::um::wincon::GetConsoleWindow;
@@ -16,6 +16,8 @@ use winapi::um::winuser::{
     RegisterRawInputDevices, SetWindowLongPtrW, ShowWindow, UnregisterClassW, HWND_MESSAGE,
     RAWINPUTDEVICE, RIDEV_INPUTSINK, RIDEV_REMOVE, SW_HIDE, WNDCLASSEXW,
 };
+
+use crate::hid::DeviceInfo;
 
 pub struct Window<T> {
     _class: WindowClass<T>,
@@ -140,12 +142,12 @@ pub struct Devices {
 }
 
 impl Devices {
-    pub fn new<T>(window: &Window<T>, usage_pages: &[USHORT]) -> Result<Self> {
+    pub fn new<T>(window: &Window<T>, device_infos: &[DeviceInfo]) -> Result<Self> {
         let mut devices = Vec::new();
-        for usage_page in usage_pages {
+        for device_info in device_infos {
             devices.push(RAWINPUTDEVICE {
-                usUsagePage: *usage_page,
-                usUsage: 1,
+                usUsagePage: device_info.usage_page,
+                usUsage: device_info.usage,
                 dwFlags: RIDEV_INPUTSINK,
                 hwndTarget: window.hwnd,
             });

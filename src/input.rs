@@ -1,18 +1,13 @@
 use aligned::{Aligned, A8};
 use winapi::ctypes::c_int;
 use winapi::shared::minwindef::{DWORD, LPVOID, UINT};
-use winapi::shared::ntdef::USHORT;
 use winapi::um::winuser::{
     GetRawInputData, GetRawInputDeviceInfoW, SendInput, HRAWINPUT, INPUT, INPUT_MOUSE,
     MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, RAWINPUT,
-    RAWINPUTHEADER, RIDI_DEVICEINFO, RID_DEVICE_INFO, RID_INPUT, RIM_TYPEHID,
+    RAWINPUTHEADER, RIDI_DEVICEINFO, RID_DEVICE_INFO, RID_DEVICE_INFO_HID, RID_INPUT, RIM_TYPEHID,
 };
 
-pub const VID_DEVICE: DWORD = 0x17EF;
-pub const PID_USB: DWORD = 0x60EE;
-pub const PID_BT: DWORD = 0x60E1;
-
-pub const USAGE_PAGES: [USHORT; 3] = [0xFF00, 0xFF10, 0xFFA0];
+use crate::hid::{DeviceInfo, PID_USB};
 
 pub fn send_click(button: DWORD) {
     let mut input0: INPUT = Default::default();
@@ -64,19 +59,22 @@ pub enum Event {
     Horizontal(i8),
 }
 
-#[derive(Eq, PartialEq)]
-pub enum InputDevice {
-    BT,
-    USB,
+impl From<&RID_DEVICE_INFO_HID> for DeviceInfo {
+    fn from(di: &RID_DEVICE_INFO_HID) -> Self {
+        Self {
+            vendor_id: di.dwVendorId as u16,
+            product_id: di.dwProductId as u16,
+            usage_page: di.usUsagePage as u16,
+            usage: di.usUsage as u16,
+        }
+    }
 }
 
-pub struct Input {
-    pub device: InputDevice,
-    pub event: Event,
-}
-
-impl Input {
-    pub(crate) fn from_raw_input(l_param: HRAWINPUT) -> Result<Self, ()> {
+impl Event {
+    pub(crate) fn from_raw_input(
+        l_param: HRAWINPUT,
+        listening_device_infos: &'static [DeviceInfo],
+    ) -> Result<Self, ()> {
         const SIZE: usize = std::mem::size_of::<RAWINPUT>() + 9;
         let mut raw_buffer: Aligned<A8, [u8; SIZE]> = Aligned([0; SIZE]);
         let raw = unsafe {
@@ -119,55 +117,43 @@ impl Input {
             {
                 return Err(());
             }
+
+            assert_eq!(device.dwType, RIM_TYPEHID);
             device
         };
 
-        if device.dwType != RIM_TYPEHID {
+        let device_info = unsafe { DeviceInfo::from(device.u.hid()) };
+        if !listening_device_infos.iter().any(|x| *x == device_info) {
             return Err(());
         }
-
-        let device_hid = unsafe { device.u.hid() };
-        if device_hid.dwVendorId != VID_DEVICE
-            || device_hid.dwProductId != PID_USB && device_hid.dwProductId != PID_BT
-        {
-            return Err(());
-        }
-
-        let device = if device_hid.dwProductId == PID_USB {
-            InputDevice::USB
-        } else {
-            InputDevice::BT
-        };
 
         let size = hid.dwSizeHid as usize * hid.dwCount as usize;
-        if device_hid.dwProductId == PID_USB {
-            debug_assert_eq!(size, 3);
-        } else {
-            debug_assert_eq!(size, 9);
-        }
         let raw = unsafe { std::slice::from_raw_parts(hid.bRawData.as_ptr(), size) };
 
-        let action = if raw[0] == 0x15 {
-            if raw[2] & 0x04 != 0x00 {
-                Event::ButtonDown
+        if raw[0] == 0x15 {
+            if device_info.product_id == PID_USB {
+                debug_assert_eq!(size, 3);
             } else {
-                Event::ButtonUp
+                debug_assert!(size == 9);
             }
-        } else {
+            if raw[2] & 0x04 != 0x00 {
+                Ok(Event::ButtonDown)
+            } else {
+                Ok(Event::ButtonUp)
+            }
+        } else if raw[0] == 0x22 {
+            debug_assert_eq!(size, 3);
             let dx = raw[1] as i8;
             let dy = raw[2] as i8;
             if dx != 0 {
-                Event::Horizontal(dx)
+                Ok(Event::Horizontal(dx))
             } else if dy != 0 {
-                Event::Vertical(dy)
+                Ok(Event::Vertical(dy))
             } else {
                 unreachable!();
             }
-        };
-
-        Ok(Input {
-            device,
-            event: action,
-        })
+        } else {
+            Err(())
+        }
     }
 }

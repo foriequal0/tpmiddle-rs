@@ -20,7 +20,8 @@ use winapi::um::winuser::{
 };
 
 use crate::control::{ScrollControl, ScrollControlType};
-use crate::input::{send_click, Event, Input, USAGE_PAGES};
+use crate::hid::{ConnectionMethod, DeviceInfo};
+use crate::input::{send_click, Event};
 use crate::window::{Devices, Window, WindowProc};
 
 const MAX_MIDDLE_CLICK_DURATION: Duration = Duration::from_millis(50);
@@ -32,13 +33,18 @@ enum State {
 }
 
 struct TPMiddle {
+    listening_device_infos: &'static [DeviceInfo],
     state: State,
     control: Box<dyn ScrollControl>,
 }
 
 impl TPMiddle {
-    fn new(control: Box<dyn ScrollControl>) -> Result<Self> {
+    fn new(
+        listening_device_infos: &'static [DeviceInfo],
+        control: Box<dyn ScrollControl>,
+    ) -> Result<Self> {
         Ok(TPMiddle {
+            listening_device_infos,
             state: State::MiddleUp,
             control,
         })
@@ -54,13 +60,15 @@ impl WindowProc for TPMiddle {
             };
         }
 
-        let input = if let Ok(input) = Input::from_raw_input(l_param as HRAWINPUT) {
-            input
+        let event = if let Ok(event) =
+            Event::from_raw_input(l_param as HRAWINPUT, self.listening_device_infos)
+        {
+            event
         } else {
             return 0;
         };
 
-        match input.event {
+        match event {
             Event::ButtonDown => {
                 self.state = State::MiddleDown {
                     time: Instant::now(),
@@ -92,6 +100,9 @@ impl WindowProc for TPMiddle {
 #[derive(Clap)]
 #[clap(version, about = "Tweak your TrackPoint Keyboard")]
 pub struct Args {
+    #[clap(long)]
+    pub connection: Option<ConnectionMethod>,
+
     #[clap(short, long)]
     pub sensitivity: Option<u8>,
 
@@ -123,14 +134,15 @@ fn try_main() -> Result<WPARAM> {
         bail!("--sensitivity value should be in [1, 9]");
     }
 
-    println!("Initializing...");
-    hid::set_keyboard_features(args.sensitivity, args.fn_lock()?)?;
+    let connection_method =
+        hid::initialize_keyboard(args.connection, args.sensitivity, args.fn_lock()?)?;
 
     c_try!(SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS));
 
-    let app = TPMiddle::new(args.scroll.create_control())?;
+    let listening_device_infos = connection_method.device_info();
+    let app = TPMiddle::new(listening_device_infos, args.scroll.create_control())?;
     let window = Window::new(app)?;
-    let _devices = Devices::new(&window, &USAGE_PAGES)?;
+    let _devices = Devices::new(&window, listening_device_infos)?;
 
     println!("Started!");
     let exit_code = unsafe {
