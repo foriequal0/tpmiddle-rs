@@ -226,13 +226,13 @@ struct BT;
 impl SetFeatures for BT {
     fn set_sensitivity(device: &HidDevice, sensitivity: u8) -> HidResult<()> {
         assert!(sensitivity >= 1 && sensitivity <= 9);
-        device.write(&[0x18, 0x02, sensitivity, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])?;
+        device.write(&[0x18, 0x02, sensitivity])?;
         Ok(())
     }
 
     fn set_fn_lock(device: &HidDevice, enable: bool) -> HidResult<()> {
         let code = if enable { 0x01 } else { 0x00 };
-        device.write(&[0x18, 0x05, code, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])?;
+        device.write(&[0x18, 0x05, code])?;
         Ok(())
     }
 
@@ -240,7 +240,7 @@ impl SetFeatures for BT {
         // 0x00: Keyboard sends scroll events
         // 0x01: "ThinkPad preferred scroll".
         let code = if enable { 0x00 } else { 0x01 };
-        device.write(&[0x18, 0x09, code, 0x00, 0x00, 0x00, 0x00, 0x00, 0x13])?;
+        device.write(&[0x18, 0x09, code])?;
         Ok(())
     }
 }
