@@ -1,6 +1,8 @@
 use aligned::{Aligned, A8};
+use anyhow::*;
 use winapi::ctypes::c_int;
 use winapi::shared::minwindef::{DWORD, LPVOID, UINT};
+use winapi::shared::ntdef::HANDLE;
 use winapi::um::winuser::{
     GetRawInputData, GetRawInputDeviceInfoW, SendInput, HRAWINPUT, INPUT, INPUT_MOUSE,
     MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, RAWINPUT,
@@ -77,7 +79,7 @@ impl Event {
     ) -> Result<Self, ()> {
         const SIZE: usize = std::mem::size_of::<RAWINPUT>() + 9;
         let mut raw_buffer: Aligned<A8, [u8; SIZE]> = Aligned([0; SIZE]);
-        let raw = unsafe {
+        let (header, hid) = unsafe {
             let mut size = SIZE as UINT;
             let result = GetRawInputData(
                 l_param as HRAWINPUT,
@@ -89,45 +91,21 @@ impl Event {
             if result == (-1 as i32 as UINT) {
                 return Err(());
             }
-            raw_buffer.as_ptr() as *const RAWINPUT
+            let raw = raw_buffer.as_ptr() as *const RAWINPUT;
+            ((*raw).header, (*raw).data.hid())
         };
 
-        let hid = unsafe {
-            if (*raw).header.dwType != RIM_TYPEHID {
-                return Err(());
-            }
-
-            (*raw).data.hid()
-        };
-
-        if hid.dwSizeHid < 3 || hid.dwCount != 1 {
+        if header.dwType != RIM_TYPEHID {
             return Err(());
         }
 
-        let device = unsafe {
-            let mut device: RID_DEVICE_INFO = Default::default();
-            let mut size = std::mem::size_of_val(&device) as UINT;
-            device.cbSize = size;
-            if GetRawInputDeviceInfoW(
-                (*raw).header.hDevice,
-                RIDI_DEVICEINFO,
-                &mut device as *mut RID_DEVICE_INFO as LPVOID,
-                &mut size,
-            ) == -1 as i32 as UINT
-            {
-                return Err(());
-            }
-
-            assert_eq!(device.dwType, RIM_TYPEHID);
-            device
-        };
-
-        let device_info = unsafe { DeviceInfo::from(device.u.hid()) };
+        let device_info = get_device_info(header.hDevice).map_err(|_| ())?;
         if !listening_device_infos.iter().any(|x| *x == device_info) {
             return Err(());
         }
 
-        let size = hid.dwSizeHid as usize * hid.dwCount as usize;
+        assert_eq!(hid.dwCount, 1);
+        let size = hid.dwSizeHid as usize;
         let raw = unsafe { std::slice::from_raw_parts(hid.bRawData.as_ptr(), size) };
 
         if raw[0] == 0x15 {
@@ -156,4 +134,27 @@ impl Event {
             Err(())
         }
     }
+}
+
+pub fn get_device_info(handle: HANDLE) -> Result<DeviceInfo> {
+    let mut rid_device_info: RID_DEVICE_INFO = Default::default();
+    let mut size = std::mem::size_of_val(&rid_device_info) as UINT;
+    rid_device_info.cbSize = size;
+    c_try_ne!(
+        (-1i32) as UINT,
+        GetRawInputDeviceInfoW(
+            handle,
+            RIDI_DEVICEINFO,
+            &mut rid_device_info as *mut RID_DEVICE_INFO as LPVOID,
+            &mut size,
+        )
+    );
+
+    ensure!(
+        rid_device_info.dwType == RIM_TYPEHID,
+        "Requested device is not HID"
+    );
+
+    let device_info = unsafe { DeviceInfo::from(rid_device_info.u.hid()) };
+    Ok(device_info)
 }
