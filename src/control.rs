@@ -6,8 +6,10 @@ use winapi::um::winuser::WHEEL_DELTA;
 
 use crate::input::send_wheel;
 
+#[derive(Eq, PartialEq)]
 pub enum ScrollControlType {
     Classic,
+    ClassicHorizontalOnly,
     Smooth,
 }
 
@@ -27,6 +29,9 @@ impl ScrollControlType {
     pub(crate) fn create_control(&self) -> Box<dyn ScrollControl> {
         match self {
             ScrollControlType::Classic => Box::new(classic::ClassicController),
+            ScrollControlType::ClassicHorizontalOnly => {
+                Box::new(classic::ClassicHorizontalOnlyController)
+            }
             ScrollControlType::Smooth => Box::new(smooth::SmoothController::new()),
         }
     }
@@ -39,12 +44,25 @@ pub trait ScrollControl {
 
 mod classic {
     use super::*;
+    use winapi::um::winuser::MOUSEEVENTF_HWHEEL;
 
     pub struct ClassicController;
 
     impl ScrollControl for ClassicController {
         fn scroll(&self, event: DWORD, delta: i8) {
             send_wheel(event, (delta as i32 * WHEEL_DELTA as i32) as DWORD)
+        }
+
+        fn stop(&self) {}
+    }
+
+    pub struct ClassicHorizontalOnlyController;
+
+    impl ScrollControl for ClassicHorizontalOnlyController {
+        fn scroll(&self, event: DWORD, delta: i8) {
+            if event == MOUSEEVENTF_HWHEEL {
+                send_wheel(event, (delta as i32 * WHEEL_DELTA as i32) as DWORD)
+            }
         }
 
         fn stop(&self) {}
