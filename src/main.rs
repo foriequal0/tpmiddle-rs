@@ -56,7 +56,7 @@ impl Args {
 }
 
 fn try_main() -> Result<WPARAM> {
-    c_try!(SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS));
+    c_try!(SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS))?;
 
     let mut args: Args = Args::parse();
     if args.sensitivity.is_some() && args.sensitivity < Some(1) || args.sensitivity > Some(9) {
@@ -81,7 +81,7 @@ fn try_main() -> Result<WPARAM> {
     let exit_code = unsafe {
         let mut message: MSG = Default::default();
         loop {
-            let status = c_try_ne_unsafe!(-1, GetMessageW(&mut message, NULL as HWND, 0, 0));
+            let status = c_try_ne_unsafe!(-1, GetMessageW(&mut message, NULL as HWND, 0, 0))?;
             if status == 0 {
                 break message.wParam;
             }

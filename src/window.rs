@@ -44,7 +44,7 @@ impl<T: WindowProc> Window<T> {
             NULL as HMENU,
             NULL as HINSTANCE,
             NULL,
-        ));
+        ))?;
 
         let mut window = Window {
             _class: class,
@@ -61,7 +61,7 @@ impl<T: WindowProc> Window<T> {
         }
 
         let mut proc = Box::new(proc);
-        c_try_nonnull!(SetWindowLongPtrW(hwnd, 0, proc.as_mut() as *mut T as isize));
+        c_try_nonnull!(SetWindowLongPtrW(hwnd, 0, proc.as_mut() as *mut T as isize))?;
         std::mem::forget(proc);
         window.long_ptr_set = true;
         Ok(window)
@@ -148,10 +148,10 @@ impl<T: WindowProc> WindowClass<T> {
         class.cbSize = std::mem::size_of_val(&class) as UINT;
         class.cbWndExtra = std::mem::size_of::<*const T>() as INT;
         class.lpfnWndProc = Some(window_proc::<T>);
-        class.hInstance = c_try_nonnull!(GetModuleHandleW(NULL as LPWSTR));
+        class.hInstance = c_try_nonnull!(GetModuleHandleW(NULL as LPWSTR))?;
         class.lpszClassName = name.as_ptr();
 
-        let atom = c_try_nonnull!(RegisterClassExW(&class));
+        let atom = c_try_nonnull!(RegisterClassExW(&class))?;
 
         Ok(Self {
             class,
@@ -189,7 +189,7 @@ impl Devices {
             devices.as_ptr(),
             devices.len() as UINT,
             std::mem::size_of::<RAWINPUTDEVICE>() as UINT
-        ));
+        ))?;
 
         Ok(Self {
             devices: devices.into(),
