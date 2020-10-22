@@ -9,20 +9,20 @@ use std::time::{Duration, Instant};
 
 use anyhow::*;
 use clap::Clap;
-use winapi::shared::minwindef::{LPARAM, LRESULT, TRUE, UINT, WPARAM};
+use winapi::shared::minwindef::{LPARAM, UINT, WPARAM};
 use winapi::shared::ntdef::NULL;
 use winapi::shared::windef::HWND;
 use winapi::um::processthreadsapi::{GetCurrentProcess, SetPriorityClass};
 use winapi::um::winbase::HIGH_PRIORITY_CLASS;
 use winapi::um::winuser::{
     DispatchMessageW, GetMessageW, TranslateMessage, HRAWINPUT, MOUSEEVENTF_HWHEEL,
-    MOUSEEVENTF_WHEEL, MSG, WM_INPUT, WM_NCCREATE,
+    MOUSEEVENTF_WHEEL, MSG, WM_INPUT,
 };
 
 use crate::control::{ScrollControl, ScrollControlType};
 use crate::hid::{DeviceInfo, Transport};
 use crate::input::{send_click, Event};
-use crate::window::{Devices, Window, WindowProc};
+use crate::window::{Devices, Window, WindowProc, WindowProcError, WindowProcResult};
 
 const MAX_MIDDLE_CLICK_DURATION: Duration = Duration::from_millis(50);
 
@@ -52,12 +52,15 @@ impl TPMiddle {
 }
 
 impl WindowProc for TPMiddle {
-    fn proc(&mut self, u_msg: UINT, _w_param: WPARAM, l_param: LPARAM) -> LRESULT {
+    fn proc(
+        &mut self,
+        _hwnd: HWND,
+        u_msg: UINT,
+        _w_param: WPARAM,
+        l_param: LPARAM,
+    ) -> WindowProcResult {
         if u_msg != WM_INPUT {
-            return match u_msg {
-                WM_NCCREATE => TRUE as LRESULT,
-                _ => 0 as LRESULT,
-            };
+            return Err(WindowProcError::UnhandledMessage);
         }
 
         let event = if let Ok(event) =
@@ -65,7 +68,7 @@ impl WindowProc for TPMiddle {
         {
             event
         } else {
-            return 0;
+            return Ok(0);
         };
 
         match event {
@@ -93,7 +96,7 @@ impl WindowProc for TPMiddle {
             }
         }
 
-        0
+        Ok(0)
     }
 }
 
