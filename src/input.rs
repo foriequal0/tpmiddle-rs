@@ -148,7 +148,7 @@ pub fn get_device_info(handle: HANDLE) -> Result<DeviceInfo> {
             &mut rid_device_info as *mut RID_DEVICE_INFO as LPVOID,
             &mut size,
         )
-    );
+    )?;
 
     ensure!(
         rid_device_info.dwType == RIM_TYPEHID,

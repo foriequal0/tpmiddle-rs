@@ -10,10 +10,13 @@ macro_rules! c_try {
             if result == FALSE {
                 let last_error = GetLastError();
                 if last_error != 0 {
-                    anyhow::bail!("LastError: {:x}", last_error);
+                    Err(anyhow::anyhow!("LastError: {:x}", last_error))
+                } else {
+                    Ok(result)
                 }
+            } else {
+                Ok(result)
             }
-            result
         }
     };
 }
@@ -29,10 +32,13 @@ macro_rules! c_try_nonnull {
             if result as usize == 0 {
                 let last_error = GetLastError();
                 if last_error != 0 {
-                    anyhow::bail!("LastError: {:x}", last_error);
+                    Err(anyhow::anyhow!("LastError: {:x}", last_error))
+                } else {
+                    Ok(result)
                 }
+            } else {
+                Ok(result)
             }
-            result
         }
     };
 }
@@ -47,10 +53,13 @@ macro_rules! c_try_ne_unsafe {
         if result == $x {
             let last_error = GetLastError();
             if last_error != 0 {
-                anyhow::bail!("LastError: {:x}", last_error);
+                Err(anyhow::anyhow!("LastError: {:x}", last_error))
+            } else {
+                Ok(result)
             }
+        } else {
+            Ok(result)
         }
-        result
     }};
 }
 
