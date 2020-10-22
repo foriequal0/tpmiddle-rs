@@ -38,7 +38,7 @@ macro_rules! c_try_nonnull {
 }
 
 #[macro_export]
-macro_rules! c_try_ne {
+macro_rules! c_try_ne_unsafe {
     ($x: expr, $expr:expr) => {{
         use ::anyhow;
         use ::winapi::um::errhandlingapi::{GetLastError, SetLastError};
@@ -52,4 +52,11 @@ macro_rules! c_try_ne {
         }
         result
     }};
+}
+
+#[macro_export]
+macro_rules! c_try_ne {
+    ($x: expr, $expr:expr) => {
+        unsafe { c_try_ne_unsafe!($x, $expr) }
+    };
 }
