@@ -20,7 +20,7 @@ use winapi::um::winuser::{
 };
 
 use crate::control::{ScrollControl, ScrollControlType};
-use crate::hid::{ConnectionMethod, DeviceInfo};
+use crate::hid::{DeviceInfo, Transport};
 use crate::input::{send_click, Event};
 use crate::window::{Devices, Window, WindowProc};
 
@@ -101,7 +101,7 @@ impl WindowProc for TPMiddle {
 #[clap(version, about = "Tweak your TrackPoint Keyboard")]
 pub struct Args {
     #[clap(long)]
-    pub connection: Option<ConnectionMethod>,
+    pub connection: Option<Transport>,
 
     #[clap(short, long)]
     pub sensitivity: Option<u8>,
@@ -136,17 +136,16 @@ fn try_main() -> Result<WPARAM> {
         bail!("--sensitivity value should be in [1, 9]");
     }
 
-    let connection_method =
-        hid::initialize_keyboard(args.connection, args.sensitivity, args.fn_lock()?)?;
+    let transport = hid::initialize_keyboard(args.connection, args.sensitivity, args.fn_lock()?)?;
 
-    if let ConnectionMethod::BT = connection_method {
+    if let Transport::BT = transport {
         if args.scroll == ScrollControlType::Smooth {
             eprintln!("Smooth scroll over Bluetooth is not supported");
         }
         args.scroll = ScrollControlType::ClassicHorizontalOnly
     }
 
-    let listening_device_infos = connection_method.device_info();
+    let listening_device_infos = transport.device_info();
     let app = TPMiddle::new(listening_device_infos, args.scroll.create_control())?;
     let window = Window::new(app)?;
     let _devices = Devices::new(&window, listening_device_infos)?;
