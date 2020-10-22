@@ -76,12 +76,12 @@ const DEVICE_INFO_USB: &[DeviceInfo] =
 const DEVICE_INFO_BT: &[DeviceInfo] = &[DEVICE_INFO_MIDDLE_BUTTON_HID_BT, DEVICE_INFO_WHEEL_HID_BT];
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
-pub enum ConnectionMethod {
+pub enum Transport {
     USB,
     BT,
 }
 
-impl ConnectionMethod {
+impl Transport {
     pub(crate) fn device_info(&self) -> &'static [DeviceInfo] {
         match self {
             Self::USB => DEVICE_INFO_USB,
@@ -90,19 +90,19 @@ impl ConnectionMethod {
     }
 }
 
-impl FromStr for ConnectionMethod {
+impl FromStr for Transport {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "USB" | "usb" => Ok(ConnectionMethod::USB),
-            "BT" | "bt" | "bluetooth" => Ok(ConnectionMethod::BT),
+            "USB" | "usb" => Ok(Transport::USB),
+            "BT" | "bt" | "bluetooth" => Ok(Transport::BT),
             _ => bail!("{} is not a valid connection method", s),
         }
     }
 }
 
-impl fmt::Display for ConnectionMethod {
+impl fmt::Display for Transport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::USB => write!(f, "USB"),
@@ -116,16 +116,16 @@ pub enum SetFeaturesError {
     #[error("Hid error")]
     HidError(#[from] hidapi::HidError),
     #[error("Cannot find a keyboard")]
-    CannotFindKeyboard(Option<ConnectionMethod>),
+    CannotFindKeyboard(Option<Transport>),
     #[error("Failed to set features")]
     CannotSetFeatures,
 }
 
 pub fn initialize_keyboard(
-    connection_method: Option<ConnectionMethod>,
+    transport: Option<Transport>,
     sensitivity: Option<u8>,
     fn_lock: Option<bool>,
-) -> Result<ConnectionMethod, SetFeaturesError> {
+) -> Result<Transport, SetFeaturesError> {
     let api = HidApi::new()?;
 
     let mut bt = None;
@@ -136,35 +136,32 @@ pub fn initialize_keyboard(
         if device_info == DEVICE_INFO_SET_FEATURES_USB {
             usb = Some(Device {
                 path: di.path().to_owned(),
-                connection_method: ConnectionMethod::USB,
+                transport: Transport::USB,
             });
         } else if device_info == DEVICE_INFO_SET_FEATURES_BT {
             bt = Some(Device {
                 path: di.path().to_owned(),
-                connection_method: ConnectionMethod::BT,
+                transport: Transport::BT,
             });
         }
     }
 
-    let device = match (connection_method, bt, usb) {
+    let device = match (transport, bt, usb) {
         (None, Some(bt), _) => bt,
         (None, None, Some(usb)) => usb,
-        (Some(ConnectionMethod::BT), Some(bt), _) => bt,
-        (Some(ConnectionMethod::USB), _, Some(usb)) => usb,
-        _ => return Err(SetFeaturesError::CannotFindKeyboard(connection_method)),
+        (Some(Transport::BT), Some(bt), _) => bt,
+        (Some(Transport::USB), _, Some(usb)) => usb,
+        _ => return Err(SetFeaturesError::CannotFindKeyboard(transport)),
     };
 
-    println!(
-        "Setting keyboard features over {}",
-        device.connection_method
-    );
-    let result = if let ConnectionMethod::USB = device.connection_method {
+    println!("Setting keyboard features over {}", device.transport);
+    let result = if let Transport::USB = device.transport {
         set_keyboard_features::<USB>(&api, &device.path, sensitivity, fn_lock)
     } else {
         set_keyboard_features::<BT>(&api, &device.path, sensitivity, fn_lock)
     };
     match result {
-        Ok(_) => return Ok(device.connection_method),
+        Ok(_) => return Ok(device.transport),
         Err(err) => {
             eprintln!("Failed to initialize: {}", err);
         }
@@ -175,7 +172,7 @@ pub fn initialize_keyboard(
 
 struct Device {
     path: CString,
-    connection_method: ConnectionMethod,
+    transport: Transport,
 }
 
 trait SetFeatures {
