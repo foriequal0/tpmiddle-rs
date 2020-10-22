@@ -3,6 +3,7 @@ use std::iter::{once, Iterator};
 use std::os::windows::ffi::OsStrExt;
 
 use anyhow::*;
+use thiserror::*;
 use winapi::_core::marker::PhantomData;
 use winapi::ctypes::wchar_t;
 use winapi::shared::basetsd::LONG_PTR;
@@ -12,9 +13,10 @@ use winapi::shared::windef::{HMENU, HWND};
 use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::um::wincon::GetConsoleWindow;
 use winapi::um::winuser::{
-    CreateWindowExW, DestroyWindow, GetWindowLongPtrW, IsWindowVisible, RegisterClassExW,
-    RegisterRawInputDevices, SetWindowLongPtrW, ShowWindow, UnregisterClassW, HWND_MESSAGE,
-    RAWINPUTDEVICE, RIDEV_INPUTSINK, RIDEV_REMOVE, SW_HIDE, WNDCLASSEXW,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, GetWindowLongPtrW, IsWindowVisible,
+    PostQuitMessage, RegisterClassExW, RegisterRawInputDevices, SetWindowLongPtrW, ShowWindow,
+    UnregisterClassW, HWND_MESSAGE, RAWINPUTDEVICE, RIDEV_INPUTSINK, RIDEV_REMOVE, SW_HIDE,
+    WNDCLASSEXW,
 };
 
 use crate::hid::DeviceInfo;
@@ -78,8 +80,25 @@ impl<T> Drop for Window<T> {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum WindowProcError {
+    #[error("Unhandled message")]
+    UnhandledMessage,
+
+    #[error(transparent)]
+    OtherError(#[from] anyhow::Error),
+}
+
+pub type WindowProcResult = Result<LRESULT, WindowProcError>;
+
 pub trait WindowProc {
-    fn proc(&mut self, u_msg: UINT, w_param: WPARAM, l_param: LPARAM) -> LRESULT;
+    fn proc(
+        &mut self,
+        hwnd: HWND,
+        u_msg: UINT,
+        w_param: WPARAM,
+        l_param: LPARAM,
+    ) -> WindowProcResult;
 }
 
 fn window_proc_ptr_from_hwnd<T>(hwnd: HWND) -> *mut T {
@@ -96,7 +115,17 @@ extern "system" fn window_proc<T: WindowProc>(
     l_param: LPARAM,
 ) -> LRESULT {
     let this = window_proc_ptr_from_hwnd::<T>(hwnd);
-    unsafe { (*this).proc(u_msg, w_param, l_param) }
+    unsafe {
+        match (*this).proc(hwnd, u_msg, w_param, l_param) {
+            Ok(result) => result,
+            Err(WindowProcError::UnhandledMessage) => DefWindowProcW(hwnd, u_msg, w_param, l_param),
+            Err(err) => {
+                eprintln!("{:?}", err);
+                PostQuitMessage(-1);
+                0
+            }
+        }
+    }
 }
 
 struct WindowClass<T> {
