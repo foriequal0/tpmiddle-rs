@@ -7,7 +7,9 @@ use thiserror::*;
 use winapi::_core::marker::PhantomData;
 use winapi::ctypes::wchar_t;
 use winapi::shared::basetsd::LONG_PTR;
-use winapi::shared::minwindef::{FALSE, HINSTANCE, INT, LPARAM, LRESULT, TRUE, UINT, WPARAM};
+use winapi::shared::minwindef::{
+    FALSE, HINSTANCE, INT, LPARAM, LPVOID, LRESULT, TRUE, UINT, WPARAM,
+};
 use winapi::shared::ntdef::{LPCWSTR, LPWSTR, NULL};
 use winapi::shared::windef::{HMENU, HWND};
 use winapi::um::libloaderapi::GetModuleHandleW;
@@ -24,12 +26,12 @@ use crate::hid::DeviceInfo;
 pub struct Window<T> {
     _class: WindowClass<T>,
     hwnd: HWND,
-    long_ptr_set: bool,
     _phantom: PhantomData<T>,
 }
 
 impl<T: WindowProc> Window<T> {
     pub fn new(proc: T) -> Result<Self> {
+        let mut proc = Box::new(proc);
         let class = WindowClass::new()?;
         let hwnd = c_try_nonnull!(CreateWindowExW(
             0,
@@ -43,15 +45,18 @@ impl<T: WindowProc> Window<T> {
             HWND_MESSAGE,
             NULL as HMENU,
             NULL as HINSTANCE,
-            NULL,
+            proc.as_mut() as *mut T as LPVOID,
         ))?;
 
-        let mut window = Window {
-            _class: class,
+        if let Err(err) = c_try_nonnull!(SetWindowLongPtrW(
             hwnd,
-            long_ptr_set: false,
-            _phantom: Default::default(),
-        };
+            0,
+            proc.as_mut() as *mut T as LONG_PTR
+        )) {
+            c_try!(DestroyWindow(hwnd))?;
+            return Err(err);
+        }
+        std::mem::forget(proc);
 
         unsafe {
             let console = GetConsoleWindow();
@@ -60,21 +65,19 @@ impl<T: WindowProc> Window<T> {
             }
         }
 
-        let mut proc = Box::new(proc);
-        c_try_nonnull!(SetWindowLongPtrW(hwnd, 0, proc.as_mut() as *mut T as isize))?;
-        std::mem::forget(proc);
-        window.long_ptr_set = true;
-        Ok(window)
+        Ok(Window {
+            _class: class,
+            hwnd,
+            _phantom: Default::default(),
+        })
     }
 }
 
 impl<T> Drop for Window<T> {
     fn drop(&mut self) {
         unsafe {
-            if self.long_ptr_set {
-                let ptr = window_proc_ptr_from_hwnd::<T>(self.hwnd);
-                std::mem::drop(Box::from_raw(ptr));
-            }
+            let ptr = window_proc_ptr_from_hwnd::<T>(self.hwnd);
+            std::mem::drop(Box::from_raw(ptr));
             assert_ne!(0, DestroyWindow(self.hwnd));
         }
     }
@@ -114,11 +117,16 @@ extern "system" fn window_proc<T: WindowProc>(
     w_param: WPARAM,
     l_param: LPARAM,
 ) -> LRESULT {
-    let this = window_proc_ptr_from_hwnd::<T>(hwnd);
-    unsafe {
-        if this.is_null() {
-            return DefWindowProcW(hwnd, u_msg, w_param, l_param);
+    let this = {
+        let from_hwnd = window_proc_ptr_from_hwnd::<T>(hwnd);
+        if from_hwnd.is_null() {
+            l_param as *mut T
+        } else {
+            from_hwnd
         }
+    };
+    assert!(!this.is_null());
+    unsafe {
         match (*this).proc(hwnd, u_msg, w_param, l_param) {
             Ok(result) => result,
             Err(WindowProcError::UnhandledMessage) => DefWindowProcW(hwnd, u_msg, w_param, l_param),
