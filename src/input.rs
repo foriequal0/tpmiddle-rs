@@ -141,7 +141,7 @@ impl Event {
             } else {
                 Ok(Event::ButtonUp)
             }
-        } else if raw[0] == 0x22 {
+        } else if raw[0] == 0x22 || raw[0] == 0x16 {
             debug_assert_eq!(size, 3);
             let dx = raw[1] as i8;
             let dy = raw[2] as i8;

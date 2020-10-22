@@ -131,13 +131,20 @@ impl Args {
 fn try_main() -> Result<WPARAM> {
     c_try!(SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS));
 
-    let args: Args = Args::parse();
+    let mut args: Args = Args::parse();
     if args.sensitivity.is_some() && args.sensitivity < Some(1) || args.sensitivity > Some(9) {
         bail!("--sensitivity value should be in [1, 9]");
     }
 
     let connection_method =
         hid::initialize_keyboard(args.connection, args.sensitivity, args.fn_lock()?)?;
+
+    if let ConnectionMethod::BT = connection_method {
+        if args.scroll == ScrollControlType::Smooth {
+            eprintln!("Smooth scroll over Bluetooth is not supported");
+        }
+        args.scroll = ScrollControlType::ClassicHorizontalOnly
+    }
 
     let listening_device_infos = connection_method.device_info();
     let app = TPMiddle::new(listening_device_infos, args.scroll.create_control())?;
