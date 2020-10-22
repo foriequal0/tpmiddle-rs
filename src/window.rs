@@ -116,6 +116,9 @@ extern "system" fn window_proc<T: WindowProc>(
 ) -> LRESULT {
     let this = window_proc_ptr_from_hwnd::<T>(hwnd);
     unsafe {
+        if this.is_null() {
+            return DefWindowProcW(hwnd, u_msg, w_param, l_param);
+        }
         match (*this).proc(hwnd, u_msg, w_param, l_param) {
             Ok(result) => result,
             Err(WindowProcError::UnhandledMessage) => DefWindowProcW(hwnd, u_msg, w_param, l_param),
