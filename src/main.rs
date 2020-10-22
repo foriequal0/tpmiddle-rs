@@ -3,102 +3,26 @@ mod util;
 mod control;
 mod hid;
 mod input;
+mod tpmiddle;
 mod window;
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::*;
 use clap::Clap;
-use winapi::shared::minwindef::{LPARAM, UINT, WPARAM};
+use winapi::shared::minwindef::WPARAM;
 use winapi::shared::ntdef::NULL;
 use winapi::shared::windef::HWND;
 use winapi::um::processthreadsapi::{GetCurrentProcess, SetPriorityClass};
 use winapi::um::winbase::HIGH_PRIORITY_CLASS;
-use winapi::um::winuser::{
-    DispatchMessageW, GetMessageW, TranslateMessage, HRAWINPUT, MOUSEEVENTF_HWHEEL,
-    MOUSEEVENTF_WHEEL, MSG, WM_INPUT,
-};
+use winapi::um::winuser::{DispatchMessageW, GetMessageW, TranslateMessage, MSG};
 
-use crate::control::{ScrollControl, ScrollControlType};
-use crate::hid::{DeviceInfo, Transport};
-use crate::input::{send_click, Event};
-use crate::window::{Devices, Window, WindowProc, WindowProcError, WindowProcResult};
+use crate::control::ScrollControlType;
+use crate::hid::Transport;
+use crate::tpmiddle::TPMiddle;
+use crate::window::{Devices, Window};
 
 const MAX_MIDDLE_CLICK_DURATION: Duration = Duration::from_millis(50);
-
-enum State {
-    MiddleUp,
-    MiddleDown { time: Instant },
-    Scroll,
-}
-
-struct TPMiddle {
-    listening_device_infos: &'static [DeviceInfo],
-    state: State,
-    control: Box<dyn ScrollControl>,
-}
-
-impl TPMiddle {
-    fn new(
-        listening_device_infos: &'static [DeviceInfo],
-        control: Box<dyn ScrollControl>,
-    ) -> Result<Self> {
-        Ok(TPMiddle {
-            listening_device_infos,
-            state: State::MiddleUp,
-            control,
-        })
-    }
-}
-
-impl WindowProc for TPMiddle {
-    fn proc(
-        &mut self,
-        _hwnd: HWND,
-        u_msg: UINT,
-        _w_param: WPARAM,
-        l_param: LPARAM,
-    ) -> WindowProcResult {
-        if u_msg != WM_INPUT {
-            return Err(WindowProcError::UnhandledMessage);
-        }
-
-        let event = if let Ok(event) =
-            Event::from_raw_input(l_param as HRAWINPUT, self.listening_device_infos)
-        {
-            event
-        } else {
-            return Ok(0);
-        };
-
-        match event {
-            Event::ButtonDown => {
-                self.state = State::MiddleDown {
-                    time: Instant::now(),
-                };
-            }
-            Event::ButtonUp => {
-                self.control.stop();
-                if let State::MiddleDown { time } = self.state {
-                    let now = Instant::now();
-                    if now <= time + MAX_MIDDLE_CLICK_DURATION {
-                        send_click(3);
-                    }
-                }
-                self.state = State::MiddleUp;
-            }
-            Event::Vertical(dy) => {
-                self.control.scroll(MOUSEEVENTF_WHEEL, dy);
-            }
-            Event::Horizontal(dx) => {
-                self.state = State::Scroll;
-                self.control.scroll(MOUSEEVENTF_HWHEEL, dx);
-            }
-        }
-
-        Ok(0)
-    }
-}
 
 #[derive(Clap)]
 #[clap(version, about = "Tweak your TrackPoint Keyboard")]
