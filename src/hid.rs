@@ -82,7 +82,7 @@ pub enum Transport {
 }
 
 impl Transport {
-    pub(crate) fn device_info(&self) -> &'static [DeviceInfo] {
+    pub fn device_info(&self) -> &'static [DeviceInfo] {
         match self {
             Self::USB => DEVICE_INFO_USB,
             Self::BT => DEVICE_INFO_BT,
