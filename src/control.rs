@@ -6,7 +6,7 @@ use winapi::um::winuser::WHEEL_DELTA;
 
 use crate::input::send_wheel;
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Copy, Clone)]
 pub enum ScrollControlType {
     Classic,
     ClassicHorizontalOnly,

@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::iter::{once, Iterator};
 use std::os::windows::ffi::OsStrExt;
@@ -17,11 +18,11 @@ use winapi::um::wincon::GetConsoleWindow;
 use winapi::um::winuser::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, GetWindowLongPtrW, IsWindowVisible,
     PostQuitMessage, RegisterClassExW, RegisterRawInputDevices, SetWindowLongPtrW, ShowWindow,
-    UnregisterClassW, HWND_MESSAGE, RAWINPUTDEVICE, RIDEV_INPUTSINK, RIDEV_REMOVE, SW_HIDE,
-    WNDCLASSEXW,
+    UnregisterClassW, HWND_MESSAGE, RAWINPUTDEVICE, RIDEV_DEVNOTIFY, RIDEV_INPUTSINK, RIDEV_REMOVE,
+    SW_HIDE, WNDCLASSEXW,
 };
 
-use crate::hid::DeviceInfo;
+use crate::hid::DEVICE_INFOS;
 
 pub struct Window<T> {
     _class: WindowClass<T>,
@@ -182,13 +183,18 @@ pub struct Devices {
 }
 
 impl Devices {
-    pub fn new<T>(window: &Window<T>, device_infos: &[DeviceInfo]) -> Result<Self> {
+    pub fn new<T>(window: &Window<T>) -> Result<Self> {
+        let mut usages = HashSet::new();
+        for device_info in DEVICE_INFOS {
+            usages.insert((device_info.usage_page, device_info.usage));
+        }
+
         let mut devices = Vec::new();
-        for device_info in device_infos {
+        for (usage_page, usage) in usages {
             devices.push(RAWINPUTDEVICE {
-                usUsagePage: device_info.usage_page,
-                usUsage: device_info.usage,
-                dwFlags: RIDEV_INPUTSINK,
+                usUsagePage: usage_page,
+                usUsage: usage,
+                dwFlags: RIDEV_INPUTSINK | RIDEV_DEVNOTIFY,
                 hwndTarget: window.hwnd,
             });
         }
