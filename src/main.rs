@@ -1,3 +1,7 @@
+/// Import longer-name versions of macros only to not collide with legacy `log`
+#[macro_use(o)]
+extern crate slog;
+
 #[macro_use]
 mod util;
 mod control;
@@ -6,13 +10,16 @@ mod input;
 mod tpmiddle;
 mod window;
 
+use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::fs::OpenOptions;
 use std::time::Duration;
 
 use anyhow::*;
 use clap::Clap;
-use env_logger::{self, Env};
 use log::*;
+use slog::{Drain, Duplicate, Logger, Never};
+use slog_scope::GlobalLoggerGuard;
 use winapi::shared::minwindef::{DWORD, LPARAM, UINT, WPARAM};
 use winapi::shared::ntdef::{HANDLE, NULL};
 use winapi::shared::windef::HWND;
@@ -201,6 +208,9 @@ pub struct Args {
 
     #[clap(long, default_value = "classic")]
     pub scroll: ScrollControlType,
+
+    #[clap(long)]
+    pub log: Option<String>,
 }
 
 impl Args {
@@ -214,11 +224,43 @@ impl Args {
     }
 }
 
+fn set_logger(log: Option<&str>) -> Result<GlobalLoggerGuard> {
+    let file_drain: Box<dyn slog::Drain<Ok = (), Err = Never> + Send> = if let Some(log) = log {
+        let file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(log)?;
+
+        let decorator = slog_term::PlainSyncDecorator::new(file);
+
+        Box::new(slog_term::CompactFormat::new(decorator).build().fuse())
+    } else {
+        Box::new(slog::Discard)
+    };
+
+    let stdout_drain = {
+        let mut builder = slog_envlogger::LogBuilder::new(
+            slog_term::CompactFormat::new(slog_term::TermDecorator::new().stdout().build()).build(),
+        );
+
+        if let Ok(s) = std::env::var("RUST_LOG") {
+            builder = builder.parse(&s);
+        } else {
+            builder = builder.parse("info");
+        }
+
+        builder.build()
+    };
+
+    let drain = std::sync::Mutex::new(Duplicate::new(file_drain, stdout_drain).fuse()).fuse();
+
+    let guard = slog_scope::set_global_logger(Logger::root(drain, o!()).into_erased());
+    slog_stdlog::init()?;
+    Ok(guard)
+}
+
 fn try_main() -> Result<WPARAM> {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
-
-    c_try!(SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS))?;
-
     let args: Args = Args::parse();
     if args.sensitivity.is_some() && args.sensitivity < Some(1) || args.sensitivity > Some(9) {
         bail!("--sensitivity value should be in [1, 9]");
@@ -226,6 +268,10 @@ fn try_main() -> Result<WPARAM> {
     if args.fn_lock && args.no_fn_lock {
         bail!("Error: Flag 'fn-lock' and 'no-fn-lock' cannot be used simultaneously",);
     }
+
+    let _logger = set_logger(args.log.as_ref().map(Borrow::borrow))?;
+
+    c_try!(SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS))?;
 
     let app = TransportAgnosticTPMiddle::new(args);
     let window = Window::new(app)?;
