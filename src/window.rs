@@ -4,6 +4,7 @@ use std::iter::{once, Iterator};
 use std::os::windows::ffi::OsStrExt;
 
 use anyhow::*;
+use log::*;
 use thiserror::*;
 use winapi::_core::marker::PhantomData;
 use winapi::ctypes::wchar_t;
@@ -132,7 +133,7 @@ extern "system" fn window_proc<T: WindowProc>(
             Ok(result) => result,
             Err(WindowProcError::UnhandledMessage) => DefWindowProcW(hwnd, u_msg, w_param, l_param),
             Err(err) => {
-                eprintln!("{:?}", err);
+                error!("{:?}", err);
                 PostQuitMessage(-1);
                 0
             }

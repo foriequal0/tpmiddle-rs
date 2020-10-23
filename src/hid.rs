@@ -10,7 +10,7 @@ pub const VID_LENOVO: u16 = 0x17EF;
 pub const PID_USB: u16 = 0x60EE;
 pub const PID_BT: u16 = 0x60E1;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub struct DeviceInfo {
     pub vendor_id: u16,
     pub product_id: u16,
@@ -38,6 +38,24 @@ impl From<&hidapi::DeviceInfo> for DeviceInfo {
             usage_page: di.usage_page(),
             usage: di.usage(),
         }
+    }
+}
+
+impl std::fmt::Debug for DeviceInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        struct UpperHex<T>(T);
+        impl<T: std::fmt::UpperHex> std::fmt::Debug for UpperHex<T> {
+            fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, "{:X}", self.0)
+            }
+        }
+
+        f.debug_struct("DevideInfo")
+            .field("vendor_id", &UpperHex(self.vendor_id))
+            .field("product_id", &UpperHex(self.product_id))
+            .field("usage_page", &UpperHex(self.usage_page))
+            .field("usage", &UpperHex(self.usage))
+            .finish()
     }
 }
 
