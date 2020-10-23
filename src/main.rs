@@ -11,6 +11,8 @@ use std::time::Duration;
 
 use anyhow::*;
 use clap::Clap;
+use env_logger::{self, Env};
+use log::*;
 use winapi::shared::minwindef::{DWORD, LPARAM, UINT, WPARAM};
 use winapi::shared::ntdef::{HANDLE, NULL};
 use winapi::shared::windef::HWND;
@@ -53,12 +55,12 @@ impl TransportAgnosticTPMiddle {
 
 impl TransportAgnosticTPMiddle {
     fn try_connect_bt_then_usb(&mut self) {
-        println!("Connecting");
+        info!("Connecting");
         let bt_err = match self.connect_over(Transport::BT) {
             Ok(warning) => {
-                println!("Connected over {}!", Transport::BT);
+                info!("Connected over {}!", Transport::BT);
                 if let Some(warning) = warning {
-                    eprintln!("{}", warning);
+                    warn!("{}", warning);
                 }
                 return;
             }
@@ -67,29 +69,29 @@ impl TransportAgnosticTPMiddle {
 
         match self.connect_over(Transport::USB) {
             Ok(warning) => {
-                println!("Connected over {}!", Transport::USB);
+                info!("Connected over {}!", Transport::USB);
                 if let Some(warning) = warning {
-                    eprintln!("{}", warning);
+                    warn!("{}", warning);
                 }
             }
             Err(err) => {
-                eprintln!("Cannot connect over Bluetooth: {}", bt_err);
-                eprintln!("Cannot connect over USB: {}", err);
+                error!("Cannot connect over Bluetooth: {}", bt_err);
+                error!("Cannot connect over USB: {}", err);
             }
         }
     }
 
     fn try_connect_over(&mut self, transport: Transport) {
-        println!("Connecting over {}", transport);
+        info!("Connecting over {}", transport);
         match self.connect_over(transport) {
             Ok(warning) => {
-                println!("Connected!");
+                info!("Connected!");
                 if let Some(warning) = warning {
-                    eprintln!("{}", warning);
+                    warn!("{}", warning);
                 }
             }
             Err(err) => {
-                eprintln!("Error: {}", err);
+                error!("Error: {}", err);
             }
         }
     }
@@ -131,13 +133,17 @@ impl WindowProc for TransportAgnosticTPMiddle {
         match u_msg {
             WM_INPUT_DEVICE_CHANGE if w_param as DWORD == GIDC_ARRIVAL => {
                 let handle = l_param as HANDLE;
-                let device_info = if let Ok(device_info) = get_device_info(handle) {
-                    device_info
-                } else {
-                    // The device is spuriously disconnected before handling this message
-                    return Ok(0);
+                trace!("ARRIVAL: {:?}", handle);
+                let device_info = match get_device_info(handle) {
+                    Ok(device_info) => device_info,
+                    Err(err) => {
+                        // The device is spuriously disconnected before handling this message
+                        debug!("Error while get device info: {}", err);
+                        return Ok(0);
+                    }
                 };
                 self.devices.insert(handle, device_info);
+                debug!("ARRIVAL: {:?}, {:?}", device_info, device_info.transport());
 
                 if let ConnectionState::Disconnected = self.state {
                     self.try_connect_bt_then_usb();
@@ -151,16 +157,19 @@ impl WindowProc for TransportAgnosticTPMiddle {
             }
             WM_INPUT_DEVICE_CHANGE if w_param as DWORD == GIDC_REMOVAL => {
                 let handle = l_param as HANDLE;
+                trace!("REMOVAL: {:?}", handle);
                 if let Some(device_info) = self.devices.remove(&handle) {
+                    debug!("REMOVAL: {:?}, {:?}", device_info, device_info.transport());
+
                     match (device_info.transport(), &self.state) {
                         (Transport::BT, ConnectionState::BT(_)) => {
                             self.state = ConnectionState::Disconnected;
-                            println!("Disconnected: Bluetooth");
+                            info!("Disconnected: Bluetooth");
                             self.try_connect_over(Transport::USB);
                         }
                         (Transport::USB, ConnectionState::USB(_)) => {
                             self.state = ConnectionState::Disconnected;
-                            println!("Disconnected: USB");
+                            info!("Disconnected: USB");
                             self.try_connect_over(Transport::BT);
                         }
                         _ => {}
@@ -206,6 +215,8 @@ impl Args {
 }
 
 fn try_main() -> Result<WPARAM> {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+
     c_try!(SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS))?;
 
     let args: Args = Args::parse();
