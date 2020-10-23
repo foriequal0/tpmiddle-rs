@@ -73,7 +73,7 @@ fn try_main() -> Result<WPARAM> {
     }
 
     let listening_device_infos = transport.device_info();
-    let app = TPMiddle::new(listening_device_infos, args.scroll.create_control())?;
+    let app = TPMiddle::new(listening_device_infos, args.scroll.create_control());
     let window = Window::new(app)?;
     let _devices = Devices::new(&window, listening_device_infos)?;
 
