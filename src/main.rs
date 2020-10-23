@@ -6,30 +6,182 @@ mod input;
 mod tpmiddle;
 mod window;
 
+use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::*;
 use clap::Clap;
-use winapi::shared::minwindef::WPARAM;
-use winapi::shared::ntdef::NULL;
+use winapi::shared::minwindef::{DWORD, LPARAM, UINT, WPARAM};
+use winapi::shared::ntdef::{HANDLE, NULL};
 use winapi::shared::windef::HWND;
 use winapi::um::processthreadsapi::{GetCurrentProcess, SetPriorityClass};
 use winapi::um::winbase::HIGH_PRIORITY_CLASS;
-use winapi::um::winuser::{DispatchMessageW, GetMessageW, TranslateMessage, MSG};
+use winapi::um::winuser::{
+    DispatchMessageW, GetMessageW, TranslateMessage, GIDC_ARRIVAL, GIDC_REMOVAL, MSG,
+    WM_INPUT_DEVICE_CHANGE,
+};
 
 use crate::control::ScrollControlType;
-use crate::hid::Transport;
+use crate::hid::{DeviceInfo, InitializeError, Transport};
+use crate::input::get_device_info;
 use crate::tpmiddle::TPMiddle;
-use crate::window::{Devices, Window};
+use crate::window::{Devices, Window, WindowProc, WindowProcError, WindowProcResult};
 
 const MAX_MIDDLE_CLICK_DURATION: Duration = Duration::from_millis(50);
+
+enum ConnectionState {
+    Disconnected,
+    USB(TPMiddle),
+    BT(TPMiddle),
+}
+
+struct TransportAgnosticTPMiddle {
+    args: Args,
+    devices: HashMap<HANDLE, DeviceInfo>,
+    state: ConnectionState,
+}
+
+impl TransportAgnosticTPMiddle {
+    fn new(args: Args) -> Self {
+        Self {
+            args,
+            devices: HashMap::new(),
+            state: ConnectionState::Disconnected,
+        }
+    }
+}
+
+impl TransportAgnosticTPMiddle {
+    fn try_connect_bt_then_usb(&mut self) {
+        println!("Connecting");
+        let bt_err = match self.connect_over(Transport::BT) {
+            Ok(warning) => {
+                println!("Connected over {}!", Transport::BT);
+                if let Some(warning) = warning {
+                    eprintln!("{}", warning);
+                }
+                return;
+            }
+            Err(err) => err,
+        };
+
+        match self.connect_over(Transport::USB) {
+            Ok(warning) => {
+                println!("Connected over {}!", Transport::USB);
+                if let Some(warning) = warning {
+                    eprintln!("{}", warning);
+                }
+            }
+            Err(err) => {
+                eprintln!("Cannot connect over Bluetooth: {}", bt_err);
+                eprintln!("Cannot connect over USB: {}", err);
+            }
+        }
+    }
+
+    fn try_connect_over(&mut self, transport: Transport) {
+        println!("Connecting over {}", transport);
+        match self.connect_over(transport) {
+            Ok(warning) => {
+                println!("Connected!");
+                if let Some(warning) = warning {
+                    eprintln!("{}", warning);
+                }
+            }
+            Err(err) => {
+                eprintln!("Error: {}", err);
+            }
+        }
+    }
+
+    fn connect_over(
+        &mut self,
+        transport: Transport,
+    ) -> Result<Option<&'static str>, InitializeError> {
+        let mut warning = None;
+        hid::initialize_keyboard(transport, self.args.sensitivity, self.args.fn_lock())?;
+
+        let scroll = if let Transport::BT = transport {
+            if let ScrollControlType::Smooth = self.args.scroll {
+                warning = Some("Warning: Smooth scroll is not available over Bluetooth");
+            }
+            ScrollControlType::ClassicHorizontalOnly
+        } else {
+            self.args.scroll
+        };
+
+        let tpmiddle = TPMiddle::new(transport.device_info(), scroll.create_control());
+        self.state = match transport {
+            Transport::USB => ConnectionState::USB(tpmiddle),
+            Transport::BT => ConnectionState::BT(tpmiddle),
+        };
+
+        Ok(warning)
+    }
+}
+
+impl WindowProc for TransportAgnosticTPMiddle {
+    fn proc(
+        &mut self,
+        hwnd: HWND,
+        u_msg: UINT,
+        w_param: WPARAM,
+        l_param: LPARAM,
+    ) -> WindowProcResult {
+        match u_msg {
+            WM_INPUT_DEVICE_CHANGE if w_param as DWORD == GIDC_ARRIVAL => {
+                let handle = l_param as HANDLE;
+                let device_info = if let Ok(device_info) = get_device_info(handle) {
+                    device_info
+                } else {
+                    // The device is spuriously disconnected before handling this message
+                    return Ok(0);
+                };
+                self.devices.insert(handle, device_info);
+
+                if let ConnectionState::Disconnected = self.state {
+                    self.try_connect_bt_then_usb();
+                } else if matches!(self.state, ConnectionState::USB(_))
+                    && device_info.transport() == Transport::BT
+                {
+                    // The wireless dongle is still connected, but the keyboard is changed to Bluetooth.
+                    self.try_connect_over(Transport::BT);
+                }
+                Ok(0)
+            }
+            WM_INPUT_DEVICE_CHANGE if w_param as DWORD == GIDC_REMOVAL => {
+                let handle = l_param as HANDLE;
+                if let Some(device_info) = self.devices.remove(&handle) {
+                    match (device_info.transport(), &self.state) {
+                        (Transport::BT, ConnectionState::BT(_)) => {
+                            self.state = ConnectionState::Disconnected;
+                            println!("Disconnected: Bluetooth");
+                            self.try_connect_over(Transport::USB);
+                        }
+                        (Transport::USB, ConnectionState::USB(_)) => {
+                            self.state = ConnectionState::Disconnected;
+                            println!("Disconnected: USB");
+                            self.try_connect_over(Transport::BT);
+                        }
+                        _ => {}
+                    }
+                }
+
+                Ok(0)
+            }
+            _ => match &mut self.state {
+                ConnectionState::BT(inner) | ConnectionState::USB(inner) => {
+                    inner.proc(hwnd, u_msg, w_param, l_param)
+                }
+                _ => Err(WindowProcError::UnhandledMessage),
+            },
+        }
+    }
+}
 
 #[derive(Clap)]
 #[clap(version, about = "Tweak your TrackPoint Keyboard")]
 pub struct Args {
-    #[clap(long)]
-    pub connection: Option<Transport>,
-
     #[clap(short, long)]
     pub sensitivity: Option<u8>,
 
@@ -43,14 +195,12 @@ pub struct Args {
 }
 
 impl Args {
-    fn fn_lock(&self) -> Result<Option<bool>> {
+    fn fn_lock(&self) -> Option<bool> {
         match (self.fn_lock, self.no_fn_lock) {
-            (true, true) => {
-                bail!("Error: Flag 'fn-lock' and 'no-fn-lock' cannot be used simultaneously",);
-            }
-            (true, _) => Ok(Some(true)),
-            (_, true) => Ok(Some(false)),
-            _ => Ok(None),
+            (true, true) => panic!(),
+            (true, _) => Some(true),
+            (_, true) => Some(false),
+            _ => None,
         }
     }
 }
@@ -58,26 +208,18 @@ impl Args {
 fn try_main() -> Result<WPARAM> {
     c_try!(SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS))?;
 
-    let mut args: Args = Args::parse();
+    let args: Args = Args::parse();
     if args.sensitivity.is_some() && args.sensitivity < Some(1) || args.sensitivity > Some(9) {
         bail!("--sensitivity value should be in [1, 9]");
     }
-
-    let transport = hid::initialize_keyboard(args.connection, args.sensitivity, args.fn_lock()?)?;
-
-    if let Transport::BT = transport {
-        if args.scroll == ScrollControlType::Smooth {
-            eprintln!("Smooth scroll over Bluetooth is not supported");
-        }
-        args.scroll = ScrollControlType::ClassicHorizontalOnly
+    if args.fn_lock && args.no_fn_lock {
+        bail!("Error: Flag 'fn-lock' and 'no-fn-lock' cannot be used simultaneously",);
     }
 
-    let listening_device_infos = transport.device_info();
-    let app = TPMiddle::new(listening_device_infos, args.scroll.create_control());
+    let app = TransportAgnosticTPMiddle::new(args);
     let window = Window::new(app)?;
-    let _devices = Devices::new(&window, listening_device_infos)?;
+    let _devices = Devices::new(&window)?;
 
-    println!("Started!");
     let exit_code = unsafe {
         let mut message: MSG = Default::default();
         loop {
