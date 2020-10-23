@@ -1,6 +1,5 @@
 use std::time::Instant;
 
-use anyhow::*;
 use winapi::shared::minwindef::{LPARAM, UINT, WPARAM};
 use winapi::um::winuser::{HRAWINPUT, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL, WM_INPUT};
 
@@ -27,12 +26,12 @@ impl TPMiddle {
     pub fn new(
         listening_device_infos: &'static [DeviceInfo],
         control: Box<dyn ScrollControl>,
-    ) -> Result<Self> {
-        Ok(TPMiddle {
+    ) -> Self {
+        TPMiddle {
             listening_device_infos,
             state: State::MiddleUp,
             control,
-        })
+        }
     }
 }
 
