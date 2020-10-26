@@ -37,8 +37,8 @@ use crate::window::{Devices, Window, WindowProc, WindowProcError, WindowProcResu
 
 enum ConnectionState {
     Disconnected,
-    USB(TPMiddle),
-    BT(TPMiddle),
+    USB { tpmiddle: TPMiddle },
+    BT { tpmiddle: TPMiddle },
 }
 
 struct TransportAgnosticTPMiddle {
@@ -118,8 +118,8 @@ impl TransportAgnosticTPMiddle {
 
         let tpmiddle = TPMiddle::new(transport.device_info(), scroll.create_control());
         self.state = match transport {
-            Transport::USB => ConnectionState::USB(tpmiddle),
-            Transport::BT => ConnectionState::BT(tpmiddle),
+            Transport::USB => ConnectionState::USB { tpmiddle },
+            Transport::BT => ConnectionState::BT { tpmiddle },
         };
 
         Ok(warning)
@@ -151,7 +151,7 @@ impl WindowProc for TransportAgnosticTPMiddle {
 
                 if let ConnectionState::Disconnected = self.state {
                     self.try_connect_bt_then_usb();
-                } else if matches!(self.state, ConnectionState::USB(_))
+                } else if matches!(self.state, ConnectionState::USB{..})
                     && device_info.transport() == Transport::BT
                 {
                     // The wireless dongle is still connected, but the keyboard is changed to Bluetooth.
@@ -166,12 +166,12 @@ impl WindowProc for TransportAgnosticTPMiddle {
                     debug!("REMOVAL: {:?}, {:?}", device_info, device_info.transport());
 
                     match (device_info.transport(), &self.state) {
-                        (Transport::BT, ConnectionState::BT(_)) => {
+                        (Transport::BT, ConnectionState::BT { .. }) => {
                             self.state = ConnectionState::Disconnected;
                             info!("Disconnected: Bluetooth");
                             self.try_connect_over(Transport::USB);
                         }
-                        (Transport::USB, ConnectionState::USB(_)) => {
+                        (Transport::USB, ConnectionState::USB { .. }) => {
                             self.state = ConnectionState::Disconnected;
                             info!("Disconnected: USB");
                             self.try_connect_over(Transport::BT);
@@ -183,8 +183,8 @@ impl WindowProc for TransportAgnosticTPMiddle {
                 Ok(0)
             }
             _ => match &mut self.state {
-                ConnectionState::BT(inner) | ConnectionState::USB(inner) => {
-                    inner.proc(hwnd, u_msg, w_param, l_param)
+                ConnectionState::BT { tpmiddle } | ConnectionState::USB { tpmiddle } => {
+                    tpmiddle.proc(hwnd, u_msg, w_param, l_param)
                 }
                 _ => Err(WindowProcError::UnhandledMessage),
             },
