@@ -1,14 +1,15 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use winapi::shared::minwindef::{LPARAM, UINT, WPARAM};
+use winapi::shared::windef::HWND;
 use winapi::um::winuser::{HRAWINPUT, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL, WM_INPUT};
 
 use crate::control::ScrollControl;
 use crate::hid::DeviceInfo;
 use crate::input::{send_click, Event};
 use crate::window::{WindowProc, WindowProcError, WindowProcResult};
-use crate::MAX_MIDDLE_CLICK_DURATION;
-use winapi::shared::windef::HWND;
+
+const MAX_MIDDLE_CLICK_DURATION: Duration = Duration::from_millis(50);
 
 enum State {
     MiddleUp,

@@ -13,7 +13,6 @@ mod window;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
-use std::time::Duration;
 
 use anyhow::*;
 use clap::Clap;
@@ -35,8 +34,6 @@ use crate::hid::{DeviceInfo, InitializeError, Transport};
 use crate::input::get_device_info;
 use crate::tpmiddle::TPMiddle;
 use crate::window::{Devices, Window, WindowProc, WindowProcError, WindowProcResult};
-
-const MAX_MIDDLE_CLICK_DURATION: Duration = Duration::from_millis(50);
 
 enum ConnectionState {
     Disconnected,
