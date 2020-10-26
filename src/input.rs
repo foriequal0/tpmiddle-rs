@@ -92,12 +92,12 @@ impl Event {
                 return Err(());
             }
             let raw = raw_buffer.as_ptr() as *const RAWINPUT;
-            ((*raw).header, (*raw).data.hid())
+            let header = (*raw).header;
+            if header.dwType != RIM_TYPEHID {
+                return Err(());
+            }
+            (header, (*raw).data.hid())
         };
-
-        if header.dwType != RIM_TYPEHID {
-            return Err(());
-        }
 
         let device_info = get_device_info(header.hDevice).map_err(|_| ())?;
         if !listening_device_infos.iter().any(|x| *x == device_info) {
