@@ -290,7 +290,12 @@ fn try_main() -> Result<WPARAM> {
     Ok(exit_code)
 }
 
-fn main() -> Result<()> {
-    let code = try_main()?;
-    std::process::exit(code as i32);
+fn main() {
+    match try_main() {
+        Ok(code) => std::process::exit(code as i32),
+        Err(err) => {
+            error!("Error: {:?}", err);
+            std::process::exit(-1);
+        }
+    }
 }
