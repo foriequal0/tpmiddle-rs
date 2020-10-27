@@ -32,13 +32,15 @@ pub struct Window<T> {
 }
 
 impl<T: WindowProc> Window<T> {
-    pub fn new(proc: T) -> Result<Self> {
+    pub fn new(name: &str, proc: T) -> Result<Self> {
         let mut proc = Box::new(proc);
-        let class = WindowClass::new()?;
+        let class = WindowClass::new(name)?;
+
+        let name: Vec<wchar_t> = OsStr::new(name).encode_wide().chain(once(0)).collect();
         let hwnd = c_try_nonnull!(CreateWindowExW(
             0,
             class.atom,
-            NULL as LPCWSTR,
+            name.as_ptr(),
             0,
             0,
             0,
@@ -163,11 +165,8 @@ struct WindowClass<T> {
 }
 
 impl<T: WindowProc> WindowClass<T> {
-    fn new() -> Result<Self> {
-        let name: Box<[wchar_t]> = OsStr::new("MessageWindowClass")
-            .encode_wide()
-            .chain(once(0))
-            .collect();
+    fn new(name: &str) -> Result<Self> {
+        let name: Vec<wchar_t> = OsStr::new(name).encode_wide().chain(once(0)).collect();
 
         let mut class: WNDCLASSEXW = Default::default();
         class.cbSize = std::mem::size_of_val(&class) as UINT;
