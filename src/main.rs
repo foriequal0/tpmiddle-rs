@@ -268,7 +268,7 @@ fn try_main() -> Result<WPARAM> {
     c_try!(SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS))?;
 
     let app = TransportAgnosticTPMiddle::new(args);
-    let window = Window::new(app)?;
+    let window = Window::new("MainWindow", app)?;
     let _devices = Devices::new(&window)?;
 
     window.run()
