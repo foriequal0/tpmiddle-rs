@@ -27,7 +27,7 @@ use winapi::um::winbase::HIGH_PRIORITY_CLASS;
 use winapi::um::winuser::{GIDC_ARRIVAL, GIDC_REMOVAL, WM_INPUT_DEVICE_CHANGE};
 
 use crate::control::ScrollControlType;
-use crate::hid::{DeviceInfo, InitializeError, Transport};
+use crate::hid::{DeviceInfo, InitializeError, Transport, DEVICE_INFOS_NOTIFY, DEVICE_INFOS_SINK};
 use crate::input::get_device_info;
 use crate::tpmiddle::TPMiddle;
 use crate::window::{Devices, Window, WindowProc, WindowProcError, WindowProcResult};
@@ -38,23 +38,23 @@ enum ConnectionState {
     BT { tpmiddle: TPMiddle },
 }
 
-struct TransportAgnosticTPMiddle {
+struct TransportAgnosticTPMiddle<'a> {
     args: Args,
+    notify_devices: &'a [DeviceInfo],
     devices: HashMap<HANDLE, DeviceInfo>,
     state: ConnectionState,
 }
 
-impl TransportAgnosticTPMiddle {
-    fn new(args: Args) -> Self {
+impl<'a> TransportAgnosticTPMiddle<'a> {
+    fn new(args: Args, notify_devices: &'a [DeviceInfo]) -> Self {
         Self {
             args,
+            notify_devices,
             devices: HashMap::new(),
             state: ConnectionState::Disconnected,
         }
     }
-}
 
-impl TransportAgnosticTPMiddle {
     fn try_connect_bt_then_usb(&mut self) {
         info!("Connecting");
         let bt_err = match self.connect_over(Transport::BT) {
@@ -123,7 +123,7 @@ impl TransportAgnosticTPMiddle {
     }
 }
 
-impl WindowProc for TransportAgnosticTPMiddle {
+impl<'a> WindowProc for TransportAgnosticTPMiddle<'a> {
     fn proc(
         &mut self,
         hwnd: HWND,
@@ -143,13 +143,18 @@ impl WindowProc for TransportAgnosticTPMiddle {
                         return Ok(0);
                     }
                 };
-                self.devices.insert(handle, device_info);
                 debug!("ARRIVAL: {:?}, {:?}", device_info, device_info.transport());
+                if !self.notify_devices.iter().any(|x| x == &device_info) {
+                    return Ok(0);
+                }
+
+                self.devices.insert(handle, device_info);
+                debug!("ARRIVAL: OK");
 
                 if let ConnectionState::Disconnected = self.state {
                     self.try_connect_bt_then_usb();
                 } else if matches!(self.state, ConnectionState::USB{..})
-                    && device_info.transport() == Transport::BT
+                    && device_info.transport() == Some(Transport::BT)
                 {
                     // The wireless dongle is still connected, but the keyboard is changed to Bluetooth.
                     self.try_connect_over(Transport::BT);
@@ -163,12 +168,12 @@ impl WindowProc for TransportAgnosticTPMiddle {
                     debug!("REMOVAL: {:?}, {:?}", device_info, device_info.transport());
 
                     match (device_info.transport(), &self.state) {
-                        (Transport::BT, ConnectionState::BT { .. }) => {
+                        (Some(Transport::BT), ConnectionState::BT { .. }) => {
                             self.state = ConnectionState::Disconnected;
                             info!("Disconnected: Bluetooth");
                             self.try_connect_over(Transport::USB);
                         }
-                        (Transport::USB, ConnectionState::USB { .. }) => {
+                        (Some(Transport::USB), ConnectionState::USB { .. }) => {
                             self.state = ConnectionState::Disconnected;
                             info!("Disconnected: USB");
                             self.try_connect_over(Transport::BT);
@@ -267,9 +272,9 @@ fn try_main() -> Result<WPARAM> {
 
     c_try!(SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS))?;
 
-    let app = TransportAgnosticTPMiddle::new(args);
+    let app = TransportAgnosticTPMiddle::new(args, DEVICE_INFOS_NOTIFY);
     let window = Window::new("MainWindow", app)?;
-    let _devices = Devices::new(&window)?;
+    let _devices = Devices::new(&window, &DEVICE_INFOS_NOTIFY, &DEVICE_INFOS_SINK)?;
 
     window.run()
 }

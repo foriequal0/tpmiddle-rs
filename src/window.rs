@@ -1,4 +1,5 @@
-use std::collections::HashSet;
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::iter::{once, Iterator};
 use std::os::windows::ffi::OsStrExt;
@@ -23,7 +24,7 @@ use winapi::um::winuser::{
     RAWINPUTDEVICE, RIDEV_DEVNOTIFY, RIDEV_INPUTSINK, RIDEV_REMOVE, SW_HIDE, WNDCLASSEXW,
 };
 
-use crate::hid::DEVICE_INFOS;
+use crate::hid::DeviceInfo;
 
 pub struct Window<T> {
     _class: WindowClass<T>,
@@ -198,18 +199,30 @@ pub struct Devices {
 }
 
 impl Devices {
-    pub fn new<T>(window: &Window<T>) -> Result<Self> {
-        let mut usages = HashSet::new();
-        for device_info in DEVICE_INFOS {
-            usages.insert((device_info.usage_page, device_info.usage));
+    pub fn new<T>(
+        window: &Window<T>,
+        notify_devices: &[DeviceInfo],
+        sink_devices: &[DeviceInfo],
+    ) -> Result<Self> {
+        let mut flags = HashMap::new();
+        for device_info in notify_devices {
+            flags.insert((device_info.usage_page, device_info.usage), RIDEV_DEVNOTIFY);
+        }
+        for device_info in sink_devices {
+            match flags.entry((device_info.usage_page, device_info.usage)) {
+                Entry::Occupied(mut entry) => *entry.get_mut() |= RIDEV_INPUTSINK,
+                Entry::Vacant(entry) => {
+                    entry.insert(RIDEV_INPUTSINK);
+                }
+            }
         }
 
         let mut devices = Vec::new();
-        for (usage_page, usage) in usages {
+        for ((usage_page, usage), flags) in flags {
             devices.push(RAWINPUTDEVICE {
                 usUsagePage: usage_page,
                 usUsage: usage,
-                dwFlags: RIDEV_INPUTSINK | RIDEV_DEVNOTIFY,
+                dwFlags: flags,
                 hwndTarget: window.hwnd,
             });
         }

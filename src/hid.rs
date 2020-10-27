@@ -19,13 +19,13 @@ pub struct DeviceInfo {
 }
 
 impl DeviceInfo {
-    pub fn transport(&self) -> Transport {
+    pub fn transport(&self) -> Option<Transport> {
         if self.product_id == PID_USB {
-            Transport::USB
+            Some(Transport::USB)
         } else if self.product_id == PID_BT {
-            Transport::BT
+            Some(Transport::BT)
         } else {
-            unreachable!()
+            None
         }
     }
 }
@@ -87,29 +87,48 @@ const DEVICE_INFO_MIDDLE_BUTTON_HID_BT: DeviceInfo = DeviceInfo {
     usage: 0x01,
 };
 
-const DEVICE_INFO_WHEEL_HID_USB: DeviceInfo = DeviceInfo {
+const DEVICE_INFO_NON_NATIVE_WHEEL_USB: DeviceInfo = DeviceInfo {
     vendor_id: VID_LENOVO,
     product_id: PID_USB,
     usage_page: 0xFF10,
     usage: 0x01,
 };
 
-const DEVICE_INFO_WHEEL_HID_BT: DeviceInfo = DeviceInfo {
+const DEVICE_INFO_NON_NATIVE_WHEEL_BT: DeviceInfo = DeviceInfo {
     vendor_id: VID_LENOVO,
     product_id: PID_BT,
     usage_page: 0xFF10,
     usage: 0x01,
 };
 
-const DEVICE_INFO_USB: &[DeviceInfo] =
-    &[DEVICE_INFO_MIDDLE_BUTTON_HID_USB, DEVICE_INFO_WHEEL_HID_USB];
-const DEVICE_INFO_BT: &[DeviceInfo] = &[DEVICE_INFO_MIDDLE_BUTTON_HID_BT, DEVICE_INFO_WHEEL_HID_BT];
+pub const DEVICE_INFO_WHEEL_HID_BT: DeviceInfo = DeviceInfo {
+    vendor_id: VID_LENOVO,
+    product_id: PID_BT,
+    usage_page: 0x01,
+    usage: 0x02,
+};
 
-pub const DEVICE_INFOS: &[DeviceInfo] = &[
+pub const DEVICE_INFOS_NOTIFY: &[DeviceInfo] = &[
     DEVICE_INFO_MIDDLE_BUTTON_HID_USB,
-    DEVICE_INFO_WHEEL_HID_USB,
     DEVICE_INFO_MIDDLE_BUTTON_HID_BT,
+];
+
+pub const DEVICE_INFOS_SINK: &[DeviceInfo] = &[
+    DEVICE_INFO_MIDDLE_BUTTON_HID_USB,
+    DEVICE_INFO_NON_NATIVE_WHEEL_USB,
+    DEVICE_INFO_MIDDLE_BUTTON_HID_BT,
+    DEVICE_INFO_NON_NATIVE_WHEEL_BT,
+    // sink to block
     DEVICE_INFO_WHEEL_HID_BT,
+];
+
+const DEVICE_INFO_USB: &[DeviceInfo] = &[
+    DEVICE_INFO_MIDDLE_BUTTON_HID_USB,
+    DEVICE_INFO_NON_NATIVE_WHEEL_USB,
+];
+const DEVICE_INFO_BT: &[DeviceInfo] = &[
+    DEVICE_INFO_MIDDLE_BUTTON_HID_BT,
+    DEVICE_INFO_NON_NATIVE_WHEEL_BT,
 ];
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
