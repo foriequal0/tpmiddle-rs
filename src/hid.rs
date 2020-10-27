@@ -50,7 +50,7 @@ impl std::fmt::Debug for DeviceInfo {
             }
         }
 
-        f.debug_struct("DevideInfo")
+        f.debug_struct("DeviceInfo")
             .field("vendor_id", &UpperHex(self.vendor_id))
             .field("product_id", &UpperHex(self.product_id))
             .field("usage_page", &UpperHex(self.usage_page))
