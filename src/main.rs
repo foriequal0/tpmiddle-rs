@@ -20,14 +20,11 @@ use log::*;
 use slog::{Drain, Duplicate, Logger, Never};
 use slog_scope::GlobalLoggerGuard;
 use winapi::shared::minwindef::{DWORD, LPARAM, UINT, WPARAM};
-use winapi::shared::ntdef::{HANDLE, NULL};
+use winapi::shared::ntdef::HANDLE;
 use winapi::shared::windef::HWND;
 use winapi::um::processthreadsapi::{GetCurrentProcess, SetPriorityClass};
 use winapi::um::winbase::HIGH_PRIORITY_CLASS;
-use winapi::um::winuser::{
-    DispatchMessageW, GetMessageW, TranslateMessage, GIDC_ARRIVAL, GIDC_REMOVAL, MSG,
-    WM_INPUT_DEVICE_CHANGE,
-};
+use winapi::um::winuser::{GIDC_ARRIVAL, GIDC_REMOVAL, WM_INPUT_DEVICE_CHANGE};
 
 use crate::control::ScrollControlType;
 use crate::hid::{DeviceInfo, InitializeError, Transport};
@@ -274,20 +271,7 @@ fn try_main() -> Result<WPARAM> {
     let window = Window::new(app)?;
     let _devices = Devices::new(&window)?;
 
-    let exit_code = unsafe {
-        let mut message: MSG = Default::default();
-        loop {
-            let status = c_try_ne_unsafe!(-1, GetMessageW(&mut message, NULL as HWND, 0, 0))?;
-            if status == 0 {
-                break message.wParam;
-            }
-
-            TranslateMessage(&message);
-            DispatchMessageW(&message);
-        }
-    };
-
-    Ok(exit_code)
+    window.run()
 }
 
 fn main() {

@@ -17,10 +17,10 @@ use winapi::shared::windef::{HMENU, HWND};
 use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::um::wincon::GetConsoleWindow;
 use winapi::um::winuser::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, GetWindowLongPtrW, IsWindowVisible,
-    PostQuitMessage, RegisterClassExW, RegisterRawInputDevices, SetWindowLongPtrW, ShowWindow,
-    UnregisterClassW, HWND_MESSAGE, RAWINPUTDEVICE, RIDEV_DEVNOTIFY, RIDEV_INPUTSINK, RIDEV_REMOVE,
-    SW_HIDE, WNDCLASSEXW,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
+    GetWindowLongPtrW, IsWindowVisible, PostQuitMessage, RegisterClassExW, RegisterRawInputDevices,
+    SetWindowLongPtrW, ShowWindow, TranslateMessage, UnregisterClassW, HWND_MESSAGE, MSG,
+    RAWINPUTDEVICE, RIDEV_DEVNOTIFY, RIDEV_INPUTSINK, RIDEV_REMOVE, SW_HIDE, WNDCLASSEXW,
 };
 
 use crate::hid::DEVICE_INFOS;
@@ -72,6 +72,21 @@ impl<T: WindowProc> Window<T> {
             hwnd,
             _phantom: Default::default(),
         })
+    }
+
+    pub fn run(self) -> Result<WPARAM> {
+        let mut message: MSG = Default::default();
+        loop {
+            let status = c_try_ne!(-1, GetMessageW(&mut message, self.hwnd, 0, 0))?;
+            if status == 0 {
+                break Ok(message.wParam);
+            }
+
+            unsafe {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+        }
     }
 }
 
