@@ -28,7 +28,7 @@ use crate::hid::DeviceInfo;
 
 pub struct Window<T> {
     _class: WindowClass<T>,
-    hwnd: HWND,
+    pub hwnd: HWND,
     _phantom: PhantomData<T>,
 }
 

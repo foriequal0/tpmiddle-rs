@@ -1,11 +1,15 @@
 /// Import longer-name versions of macros only to not collide with legacy `log`
 #[macro_use(o)]
 extern crate slog;
+#[macro_use]
+extern crate lazy_static;
 
 #[macro_use]
 mod util;
+mod bt_wheel_blocker;
 mod control;
 mod hid;
+mod hook;
 mod input;
 mod tpmiddle;
 mod window;
@@ -26,16 +30,24 @@ use winapi::um::processthreadsapi::{GetCurrentProcess, SetPriorityClass};
 use winapi::um::winbase::HIGH_PRIORITY_CLASS;
 use winapi::um::winuser::{GIDC_ARRIVAL, GIDC_REMOVAL, WM_INPUT_DEVICE_CHANGE};
 
+use crate::bt_wheel_blocker::WheelBlocker;
 use crate::control::ScrollControlType;
-use crate::hid::{DeviceInfo, InitializeError, Transport, DEVICE_INFOS_NOTIFY, DEVICE_INFOS_SINK};
+use crate::hid::{
+    DeviceInfo, Transport, DEVICE_INFOS_NOTIFY, DEVICE_INFOS_SINK, DEVICE_INFO_WHEEL_HID_BT,
+};
 use crate::input::get_device_info;
 use crate::tpmiddle::TPMiddle;
 use crate::window::{Devices, Window, WindowProc, WindowProcError, WindowProcResult};
 
 enum ConnectionState {
     Disconnected,
-    USB { tpmiddle: TPMiddle },
-    BT { tpmiddle: TPMiddle },
+    USB {
+        tpmiddle: TPMiddle,
+    },
+    BT {
+        wheel_blocker: Option<WheelBlocker>,
+        tpmiddle: TPMiddle,
+    },
 }
 
 struct TransportAgnosticTPMiddle<'a> {
@@ -58,22 +70,16 @@ impl<'a> TransportAgnosticTPMiddle<'a> {
     fn try_connect_bt_then_usb(&mut self) {
         info!("Connecting");
         let bt_err = match self.connect_over(Transport::BT) {
-            Ok(warning) => {
+            Ok(()) => {
                 info!("Connected over {}!", Transport::BT);
-                if let Some(warning) = warning {
-                    warn!("{}", warning);
-                }
                 return;
             }
             Err(err) => err,
         };
 
         match self.connect_over(Transport::USB) {
-            Ok(warning) => {
+            Ok(()) => {
                 info!("Connected over {}!", Transport::USB);
-                if let Some(warning) = warning {
-                    warn!("{}", warning);
-                }
             }
             Err(err) => {
                 error!("Cannot connect over Bluetooth: {}", bt_err);
@@ -85,11 +91,8 @@ impl<'a> TransportAgnosticTPMiddle<'a> {
     fn try_connect_over(&mut self, transport: Transport) {
         info!("Connecting over {}", transport);
         match self.connect_over(transport) {
-            Ok(warning) => {
+            Ok(()) => {
                 info!("Connected!");
-                if let Some(warning) = warning {
-                    warn!("{}", warning);
-                }
             }
             Err(err) => {
                 error!("Error: {}", err);
@@ -97,29 +100,34 @@ impl<'a> TransportAgnosticTPMiddle<'a> {
         }
     }
 
-    fn connect_over(
-        &mut self,
-        transport: Transport,
-    ) -> Result<Option<&'static str>, InitializeError> {
-        let mut warning = None;
+    fn connect_over(&mut self, transport: Transport) -> Result<()> {
         hid::initialize_keyboard(transport, self.args.sensitivity, self.args.fn_lock())?;
 
-        let scroll = if let Transport::BT = transport {
-            if let ScrollControlType::Smooth = self.args.scroll {
-                warning = Some("Warning: Smooth scroll is not available over Bluetooth");
-            }
-            ScrollControlType::ClassicHorizontalOnly
-        } else {
-            self.args.scroll
-        };
-
-        let tpmiddle = TPMiddle::new(transport.device_info(), scroll.create_control());
         self.state = match transport {
-            Transport::USB => ConnectionState::USB { tpmiddle },
-            Transport::BT => ConnectionState::BT { tpmiddle },
+            Transport::USB => {
+                let tpmiddle =
+                    TPMiddle::new(transport.device_info(), self.args.scroll.create_control());
+                ConnectionState::USB { tpmiddle }
+            }
+            Transport::BT => {
+                let (wheel_blocker, scroll) = if self.args.scroll == ScrollControlType::Smooth {
+                    (
+                        Some(WheelBlocker::new(&DEVICE_INFO_WHEEL_HID_BT)?),
+                        ScrollControlType::Smooth,
+                    )
+                } else {
+                    (None, ScrollControlType::ClassicHorizontalOnly)
+                };
+
+                let tpmiddle = TPMiddle::new(transport.device_info(), scroll.create_control());
+                ConnectionState::BT {
+                    wheel_blocker,
+                    tpmiddle,
+                }
+            }
         };
 
-        Ok(warning)
+        Ok(())
     }
 }
 
@@ -185,7 +193,14 @@ impl<'a> WindowProc for TransportAgnosticTPMiddle<'a> {
                 Ok(0)
             }
             _ => match &mut self.state {
-                ConnectionState::BT { tpmiddle } | ConnectionState::USB { tpmiddle } => {
+                ConnectionState::USB { tpmiddle } => tpmiddle.proc(hwnd, u_msg, w_param, l_param),
+                ConnectionState::BT {
+                    wheel_blocker,
+                    tpmiddle,
+                } => {
+                    if let Some(wheel_blocker) = wheel_blocker {
+                        wheel_blocker.peek_message(u_msg, l_param);
+                    }
                     tpmiddle.proc(hwnd, u_msg, w_param, l_param)
                 }
                 _ => Err(WindowProcError::UnhandledMessage),

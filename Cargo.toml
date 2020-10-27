@@ -14,6 +14,7 @@ aligned = "^0.3.4"
 crossbeam-channel = "^0.4.4"
 hidapi = "^1.2.3"
 spin_sleep = "^1.0.0"
+lazy_static = "^1.4.0"
 log = "^0.4.11"
 slog = "^2.5.2"
 slog-scope = "^4.3.0"
@@ -32,6 +33,7 @@ features = [
     "windef",
     "wincon",
     "errhandlingapi",
+    "sysinfoapi",
     "libloaderapi",
     "impl-default"
 ]
