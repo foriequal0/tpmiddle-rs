@@ -61,13 +61,6 @@ impl<T: WindowProc> Window<T> {
         }
         std::mem::forget(proc);
 
-        unsafe {
-            let console = GetConsoleWindow();
-            if IsWindowVisible(console) == TRUE {
-                ShowWindow(console, SW_HIDE);
-            }
-        }
-
         Ok(Window {
             _class: class,
             hwnd,
@@ -252,6 +245,15 @@ impl Drop for Devices {
                     std::mem::size_of::<RAWINPUTDEVICE>() as _
                 )
             );
+        }
+    }
+}
+
+pub fn hide_console() {
+    unsafe {
+        let console = GetConsoleWindow();
+        if IsWindowVisible(console) == TRUE {
+            ShowWindow(console, SW_HIDE);
         }
     }
 }
