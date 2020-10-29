@@ -15,7 +15,8 @@ use winapi::um::processthreadsapi::{GetCurrentProcess, SetPriorityClass};
 use winapi::um::winbase::HIGH_PRIORITY_CLASS;
 
 use tpmiddle_rs::{
-    c_try, Args, Devices, TransportAgnosticTPMiddle, Window, DEVICE_INFOS_NOTIFY, DEVICE_INFOS_SINK,
+    c_try, hide_console, Args, Devices, TransportAgnosticTPMiddle, Window, DEVICE_INFOS_NOTIFY,
+    DEVICE_INFOS_SINK,
 };
 
 fn set_logger(log: Option<&str>) -> Result<GlobalLoggerGuard> {
@@ -61,6 +62,7 @@ fn try_main(args: Args) -> Result<WPARAM> {
     let window = Window::new("MainWindow", app)?;
     let _devices = Devices::new(&window, &DEVICE_INFOS_NOTIFY, &DEVICE_INFOS_SINK)?;
 
+    hide_console();
     window.run()
 }
 
