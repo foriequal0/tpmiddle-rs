@@ -141,7 +141,7 @@ impl<'a> WindowProc for TransportAgnosticTPMiddle<'a> {
     ) -> WindowProcResult {
         match u_msg {
             WM_INPUT_DEVICE_CHANGE if w_param as DWORD == GIDC_ARRIVAL => {
-                let handle = l_param as HANDLE;
+                let handle = l_param as _;
                 trace!("ARRIVAL: {:?}", handle);
                 let device_info = match get_device_info(handle) {
                     Ok(device_info) => device_info,
@@ -170,7 +170,7 @@ impl<'a> WindowProc for TransportAgnosticTPMiddle<'a> {
                 Ok(0)
             }
             WM_INPUT_DEVICE_CHANGE if w_param as DWORD == GIDC_REMOVAL => {
-                let handle = l_param as HANDLE;
+                let handle = l_param as _;
                 trace!("REMOVAL: {:?}", handle);
                 if let Some(device_info) = self.devices.remove(&handle) {
                     debug!("REMOVAL: {:?}, {:?}", device_info, device_info.transport());

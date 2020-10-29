@@ -5,15 +5,15 @@ use aligned::{Aligned, A8};
 use anyhow::*;
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use winapi::ctypes::c_int;
-use winapi::shared::minwindef::{DWORD, LPARAM, LPVOID, UINT, WPARAM};
+use winapi::shared::minwindef::{DWORD, LPARAM, UINT, WPARAM};
 use winapi::shared::ntdef::{HANDLE, NULL};
 use winapi::shared::windef::HWND;
 use winapi::um::sysinfoapi::GetTickCount;
 use winapi::um::winuser::{
     GetRawInputData, GetRawInputDeviceInfoW, GetRawInputDeviceList, PostMessageW, PostQuitMessage,
-    HRAWINPUT, LLMHF_INJECTED, LLMHF_LOWER_IL_INJECTED, MSLLHOOKSTRUCT, RAWINPUT,
-    RAWINPUTDEVICELIST, RAWINPUTHEADER, RIDI_DEVICENAME, RID_INPUT, RIM_TYPEMOUSE, RI_MOUSE_WHEEL,
-    WM_INPUT, WM_MOUSEWHEEL, WM_USER,
+    LLMHF_INJECTED, LLMHF_LOWER_IL_INJECTED, MSLLHOOKSTRUCT, RAWINPUT, RAWINPUTDEVICELIST,
+    RAWINPUTHEADER, RIDI_DEVICENAME, RID_INPUT, RIM_TYPEMOUSE, RI_MOUSE_WHEEL, WM_INPUT,
+    WM_MOUSEWHEEL, WM_USER,
 };
 
 use crate::hid::DeviceInfo;
@@ -47,15 +47,15 @@ impl WheelBlocker {
         const SIZE: usize = std::mem::size_of::<RAWINPUT>();
         let mut raw_buffer: Aligned<A8, [u8; SIZE]> = Aligned([0; SIZE]);
         let (header, mouse) = unsafe {
-            let mut size = SIZE as UINT;
+            let mut size = SIZE as _;
             let result = GetRawInputData(
-                l_param as HRAWINPUT,
+                l_param as _,
                 RID_INPUT,
-                raw_buffer.as_mut_ptr() as LPVOID,
+                raw_buffer.as_mut_ptr() as _,
                 &mut size,
-                std::mem::size_of::<RAWINPUTHEADER>() as UINT,
+                std::mem::size_of::<RAWINPUTHEADER>() as _,
             );
-            if result == (-1 as i32 as UINT) {
+            if result == (-1i32 as _) {
                 return;
             }
             let raw = raw_buffer.as_ptr() as *const RAWINPUT;
@@ -81,15 +81,15 @@ impl WheelBlocker {
 }
 
 fn get_target_device_handle(target_device: &DeviceInfo) -> Result<HANDLE> {
-    const SIZE: UINT = std::mem::size_of::<RAWINPUTDEVICELIST>() as UINT;
+    const SIZE: UINT = std::mem::size_of::<RAWINPUTDEVICELIST>() as _;
     let mut num_devices = 0;
     c_try_ne!(
-        -1i32 as UINT,
+        -1i32 as _,
         GetRawInputDeviceList(NULL as _, &mut num_devices, SIZE)
     )?;
     let mut devices = vec![Default::default(); num_devices as _];
     c_try_ne!(
-        -1i32 as UINT,
+        -1i32 as _,
         GetRawInputDeviceList(devices.as_mut_ptr(), &mut num_devices, SIZE)
     )?;
 
@@ -102,12 +102,12 @@ fn get_target_device_handle(target_device: &DeviceInfo) -> Result<HANDLE> {
     for device in devices {
         let mut size = 0;
         c_try_ne!(
-            -1i32 as UINT,
+            -1i32 as _,
             GetRawInputDeviceInfoW(device.hDevice, RIDI_DEVICENAME, NULL as _, &mut size)
         )?;
         let mut buffer = vec![0; size as _];
         c_try_ne!(
-            -1i32 as UINT,
+            -1i32 as _,
             GetRawInputDeviceInfoW(
                 device.hDevice,
                 RIDI_DEVICENAME,
@@ -220,7 +220,7 @@ impl HookProc for WheelBlockerHookProc {
                     -((message.time - data.time) as i32)
                 };
 
-            if message_arrived_before < MESSAGE_TIMEOUT_MS as i32 {
+            if message_arrived_before < MESSAGE_TIMEOUT_MS as _ {
                 return if message.block {
                     Ok(1)
                 } else {

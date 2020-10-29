@@ -5,7 +5,7 @@ use anyhow::*;
 use winapi::_core::marker::PhantomData;
 use winapi::ctypes::c_int;
 use winapi::shared::minwindef::{DWORD, HMODULE, LPARAM, LRESULT, WPARAM};
-use winapi::shared::ntdef::{LPCWSTR, NULL};
+use winapi::shared::ntdef::NULL;
 use winapi::shared::windef::HHOOK;
 use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::um::winuser::{
@@ -46,7 +46,7 @@ impl<H: HookProc + 'static> LowLevelMouseHook<H> {
         }
 
         let register = register_hook_proc_context(WH_MOUSE_LL, hook_proc)?;
-        let hmod = c_try_nonnull!(GetModuleHandleW(NULL as LPCWSTR))?;
+        let hmod = c_try_nonnull!(GetModuleHandleW(NULL as _))?;
         let hook_handle = HookHandle::new(WH_MOUSE_LL, Some(proc), hmod, 0)?;
         let hook_proc_handle = register.get_handle(hook_handle.hhook);
 

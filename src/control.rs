@@ -50,7 +50,7 @@ mod classic {
 
     impl ScrollControl for ClassicController {
         fn scroll(&self, event: DWORD, delta: i8) {
-            send_wheel(event, (delta as i32 * WHEEL_DELTA as i32) as DWORD)
+            send_wheel(event, (delta as i32 * WHEEL_DELTA as i32) as _)
         }
 
         fn stop(&self) {}
@@ -61,7 +61,7 @@ mod classic {
     impl ScrollControl for ClassicHorizontalOnlyController {
         fn scroll(&self, event: DWORD, delta: i8) {
             if event == MOUSEEVENTF_HWHEEL {
-                send_wheel(event, (delta as i32 * WHEEL_DELTA as i32) as DWORD)
+                send_wheel(event, (delta as i32 * WHEEL_DELTA as i32) as _)
             }
         }
 
@@ -261,7 +261,7 @@ mod smooth {
                     feed_rate,
                     ..
                 } if *prev_event == event && *scroll_direction as i8 == delta.signum() => {
-                    feed_rate.feed(now, delta.abs() as f32);
+                    feed_rate.feed(now, delta.abs() as _);
                     // To enable more precise wheel speed control, nudge the delta when the pressure is low,
                     // High pressure -> faster feed rate -> nudge ~ 1.0 (for a narrower range)
                     // Low pressure -> Slower feed rate -> nudge < 1.0 (for a broader range)
@@ -275,7 +275,7 @@ mod smooth {
                     let initial_nudge = (MIN_FEED_INTERVAL_SECS / MAX_FEED_INTERVAL_SECS).sqrt();
                     *self = State::Scrolling {
                         event,
-                        scroll_direction: delta.signum() as f32,
+                        scroll_direction: delta.signum() as _,
                         buffer: delta.abs() as f32 * initial_nudge,
                         decay: Decay::AutomaticExponential,
                         reservoir: 0.0,

@@ -10,11 +10,9 @@ use thiserror::*;
 use winapi::_core::marker::PhantomData;
 use winapi::ctypes::wchar_t;
 use winapi::shared::basetsd::LONG_PTR;
-use winapi::shared::minwindef::{
-    FALSE, HINSTANCE, INT, LPARAM, LPVOID, LRESULT, TRUE, UINT, WPARAM,
-};
-use winapi::shared::ntdef::{LPCWSTR, LPWSTR, NULL};
-use winapi::shared::windef::{HMENU, HWND};
+use winapi::shared::minwindef::{FALSE, LPARAM, LRESULT, TRUE, UINT, WPARAM};
+use winapi::shared::ntdef::{LPCWSTR, NULL};
+use winapi::shared::windef::HWND;
 use winapi::um::libloaderapi::GetModuleHandleW;
 use winapi::um::wincon::GetConsoleWindow;
 use winapi::um::winuser::{
@@ -48,9 +46,9 @@ impl<T: WindowProc> Window<T> {
             0,
             0,
             HWND_MESSAGE,
-            NULL as HMENU,
-            NULL as HINSTANCE,
-            proc.as_mut() as *mut T as LPVOID,
+            NULL as _,
+            NULL as _,
+            proc.as_mut() as *mut T as _,
         ))?;
 
         if let Err(err) = c_try_nonnull!(SetWindowLongPtrW(
@@ -170,17 +168,17 @@ impl<T: WindowProc> WindowClass<T> {
         let name: Vec<wchar_t> = OsStr::new(name).encode_wide().chain(once(0)).collect();
 
         let mut class: WNDCLASSEXW = Default::default();
-        class.cbSize = std::mem::size_of_val(&class) as UINT;
-        class.cbWndExtra = std::mem::size_of::<*const T>() as INT;
+        class.cbSize = std::mem::size_of_val(&class) as _;
+        class.cbWndExtra = std::mem::size_of::<*const T>() as _;
         class.lpfnWndProc = Some(window_proc::<T>);
-        class.hInstance = c_try_nonnull!(GetModuleHandleW(NULL as LPWSTR))?;
+        class.hInstance = c_try_nonnull!(GetModuleHandleW(NULL as _))?;
         class.lpszClassName = name.as_ptr();
 
         let atom = c_try_nonnull!(RegisterClassExW(&class))?;
 
         Ok(Self {
             class,
-            atom: atom as LPCWSTR,
+            atom: atom as _,
             _phantom: Default::default(),
         })
     }
@@ -229,8 +227,8 @@ impl Devices {
 
         c_try!(RegisterRawInputDevices(
             devices.as_ptr(),
-            devices.len() as UINT,
-            std::mem::size_of::<RAWINPUTDEVICE>() as UINT
+            devices.len() as _,
+            std::mem::size_of::<RAWINPUTDEVICE>() as _
         ))?;
 
         Ok(Self {
@@ -243,15 +241,15 @@ impl Drop for Devices {
     fn drop(&mut self) {
         for device in self.devices.iter_mut() {
             device.dwFlags = RIDEV_REMOVE;
-            device.hwndTarget = NULL as HWND;
+            device.hwndTarget = NULL as _;
         }
         unsafe {
             assert_ne!(
                 FALSE,
                 RegisterRawInputDevices(
                     self.devices.as_ptr(),
-                    self.devices.len() as UINT,
-                    std::mem::size_of::<RAWINPUTDEVICE>() as UINT
+                    self.devices.len() as _,
+                    std::mem::size_of::<RAWINPUTDEVICE>() as _
                 )
             );
         }
