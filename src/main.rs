@@ -274,17 +274,7 @@ fn set_logger(log: Option<&str>) -> Result<GlobalLoggerGuard> {
     Ok(guard)
 }
 
-fn try_main() -> Result<WPARAM> {
-    let args: Args = Args::parse();
-    if args.sensitivity.is_some() && args.sensitivity < Some(1) || args.sensitivity > Some(9) {
-        bail!("--sensitivity value should be in [1, 9]");
-    }
-    if args.fn_lock && args.no_fn_lock {
-        bail!("Error: Flag 'fn-lock' and 'no-fn-lock' cannot be used simultaneously",);
-    }
-
-    let _logger = set_logger(args.log.as_ref().map(Borrow::borrow))?;
-
+fn try_main(args: Args) -> Result<WPARAM> {
     c_try!(SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS))?;
 
     let app = TransportAgnosticTPMiddle::new(args, DEVICE_INFOS_NOTIFY);
@@ -295,7 +285,22 @@ fn try_main() -> Result<WPARAM> {
 }
 
 fn main() {
-    match try_main() {
+    let args: Args = Args::parse();
+    if args.sensitivity.is_some() && args.sensitivity < Some(1) || args.sensitivity > Some(9) {
+        eprintln!("Argument error: --sensitivity value should be in [1, 9]");
+        std::process::exit(-1);
+    }
+    if args.fn_lock && args.no_fn_lock {
+        eprintln!("Argument error: Flag 'fn-lock' and 'no-fn-lock' cannot be used simultaneously",);
+        std::process::exit(-1);
+    }
+
+    let _logger =
+        set_logger(args.log.as_ref().map(Borrow::borrow)).expect("Error: Cannot install logger");
+
+    std::panic::set_hook(Box::new(|info| error!("Error: {:?}", info)));
+
+    match try_main(args) {
         Ok(code) => std::process::exit(code as i32),
         Err(err) => {
             error!("Error: {:?}", err);
