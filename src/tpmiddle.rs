@@ -6,7 +6,7 @@ use winapi::um::winuser::{HRAWINPUT, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL, WM_I
 
 use crate::control::ScrollControl;
 use crate::hid::DeviceInfo;
-use crate::input::{send_click, Event};
+use crate::input::{send_click, Event, EventReader};
 use crate::window::{WindowProc, WindowProcError, WindowProcResult};
 
 const MAX_MIDDLE_CLICK_DURATION: Duration = Duration::from_millis(50);
@@ -18,20 +18,17 @@ enum State {
 }
 
 pub struct TPMiddle {
-    listening_device_infos: &'static [DeviceInfo],
     state: State,
     control: Box<dyn ScrollControl>,
+    event_reader: EventReader<'static>,
 }
 
 impl TPMiddle {
-    pub fn new(
-        listening_device_infos: &'static [DeviceInfo],
-        control: Box<dyn ScrollControl>,
-    ) -> Self {
+    pub fn new(device_filter: &'static [DeviceInfo], control: Box<dyn ScrollControl>) -> Self {
         TPMiddle {
-            listening_device_infos,
             state: State::MiddleUp,
             control,
+            event_reader: EventReader::new(device_filter),
         }
     }
 }
@@ -48,9 +45,7 @@ impl WindowProc for TPMiddle {
             return Err(WindowProcError::UnhandledMessage);
         }
 
-        let event = if let Ok(event) =
-            Event::from_raw_input(l_param as HRAWINPUT, self.listening_device_infos)
-        {
+        let event = if let Ok(event) = self.event_reader.read_from_raw_input(l_param as HRAWINPUT) {
             event
         } else {
             return Ok(0);
