@@ -1,12 +1,15 @@
+use std::ops::Index;
+
 use aligned::{Aligned, A8};
 use anyhow::*;
 use winapi::ctypes::c_int;
 use winapi::shared::minwindef::{DWORD, LPVOID, UINT};
-use winapi::shared::ntdef::HANDLE;
+use winapi::shared::ntdef::{HANDLE, NULL};
 use winapi::um::winuser::{
     GetRawInputData, GetRawInputDeviceInfoW, SendInput, HRAWINPUT, INPUT, INPUT_MOUSE,
-    MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, RAWINPUT,
-    RAWINPUTHEADER, RIDI_DEVICEINFO, RID_DEVICE_INFO, RID_DEVICE_INFO_HID, RID_INPUT, RIM_TYPEHID,
+    MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, RAWHID,
+    RAWINPUT, RAWINPUTHEADER, RIDI_DEVICEINFO, RID_DEVICE_INFO, RID_DEVICE_INFO_HID, RID_INPUT,
+    RIM_TYPEHID,
 };
 
 use crate::hid::{DeviceInfo, PID_USB};
@@ -61,68 +64,79 @@ pub enum Event {
     Horizontal(i8),
 }
 
-impl From<&RID_DEVICE_INFO_HID> for DeviceInfo {
-    fn from(di: &RID_DEVICE_INFO_HID) -> Self {
+pub struct EventReader<'a> {
+    device_filter: &'a [DeviceInfo],
+    buffer: Vec<u8>,
+}
+
+impl<'a> EventReader<'a> {
+    pub fn new(device_filter: &'a [DeviceInfo]) -> Self {
+        const HEADROOM: usize = 100;
+        const SIZE: usize = std::mem::size_of::<RAWINPUT>() + HEADROOM;
         Self {
-            vendor_id: di.dwVendorId as u16,
-            product_id: di.dwProductId as u16,
-            usage_page: di.usUsagePage as u16,
-            usage: di.usUsage as u16,
+            device_filter,
+            buffer: vec![0; SIZE],
         }
     }
 }
 
-impl Event {
-    pub(crate) fn from_raw_input(
-        l_param: HRAWINPUT,
-        listening_device_infos: &'static [DeviceInfo],
-    ) -> Result<Self, ()> {
-        const SIZE: usize = std::mem::size_of::<RAWINPUT>() + 9;
-        let mut raw_buffer: Aligned<A8, [u8; SIZE]> = Aligned([0; SIZE]);
-        let (header, hid) = unsafe {
-            let mut size = SIZE as UINT;
+impl<'a> EventReader<'a> {
+    fn read_hid(&mut self, l_param: HRAWINPUT) -> Result<(DeviceInfo, RawHID<'a>), ()> {
+        unsafe {
+            const SIZE: UINT = std::mem::size_of::<RAWINPUTHEADER>() as _;
+            let mut size = 0;
+            let result =
+                GetRawInputData(l_param as HRAWINPUT, RID_INPUT, NULL as _, &mut size, SIZE);
+            if result == (-1 as i32 as UINT) {
+                return Err(());
+            }
+
+            if self.buffer.len() < size as usize {
+                self.buffer.resize(size as usize, 0);
+            }
             let result = GetRawInputData(
                 l_param as HRAWINPUT,
                 RID_INPUT,
-                raw_buffer.as_mut_ptr() as LPVOID,
+                self.buffer.as_mut_ptr() as LPVOID,
                 &mut size,
                 std::mem::size_of::<RAWINPUTHEADER>() as UINT,
             );
             if result == (-1 as i32 as UINT) {
                 return Err(());
             }
-            let raw = raw_buffer.as_ptr() as *const RAWINPUT;
+            let raw = self.buffer.as_ptr() as *const RAWINPUT;
             let header = (*raw).header;
             if header.dwType != RIM_TYPEHID {
                 return Err(());
             }
-            (header, (*raw).data.hid())
-        };
 
-        let device_info = get_device_info(header.hDevice).map_err(|_| ())?;
-        if !listening_device_infos.iter().any(|x| *x == device_info) {
-            return Err(());
-        }
-
-        assert_eq!(hid.dwCount, 1);
-        let size = hid.dwSizeHid as usize;
-        let raw = unsafe { std::slice::from_raw_parts(hid.bRawData.as_ptr(), size) };
-
-        if raw[0] == 0x15 {
-            if device_info.product_id == PID_USB {
-                debug_assert_eq!(size, 3);
-            } else {
-                debug_assert!(size == 9);
+            let device_info = get_device_info(header.hDevice).map_err(|_| ())?;
+            if !self.device_filter.iter().any(|x| *x == device_info) {
+                return Err(());
             }
-            if raw[2] & 0x04 != 0x00 {
+
+            Ok((device_info, RawHID::from((*raw).data.hid())))
+        }
+    }
+
+    pub fn read_from_raw_input(&mut self, l_param: HRAWINPUT) -> Result<Event, ()> {
+        let (device_info, hid) = self.read_hid(l_param)?;
+        assert_eq!(hid.count, 1);
+        if hid[0][0] == 0x15 {
+            if device_info.product_id == PID_USB {
+                debug_assert_eq!(hid.size, 3);
+            } else {
+                debug_assert_eq!(hid.size, 9);
+            }
+            if hid[0][2] & 0x04 != 0x00 {
                 Ok(Event::ButtonDown)
             } else {
                 Ok(Event::ButtonUp)
             }
-        } else if raw[0] == 0x22 || raw[0] == 0x16 {
-            debug_assert_eq!(size, 3);
-            let dx = raw[1] as i8;
-            let dy = raw[2] as i8;
+        } else if hid[0][0] == 0x22 || hid[0][0] == 0x16 {
+            debug_assert_eq!(hid.size, 3);
+            let dx = hid[0][1] as i8;
+            let dy = hid[0][2] as i8;
             if dx != 0 {
                 Ok(Event::Horizontal(dx))
             } else if dy != 0 {
@@ -132,6 +146,17 @@ impl Event {
             }
         } else {
             Err(())
+        }
+    }
+}
+
+impl From<&RID_DEVICE_INFO_HID> for DeviceInfo {
+    fn from(di: &RID_DEVICE_INFO_HID) -> Self {
+        Self {
+            vendor_id: di.dwVendorId as u16,
+            product_id: di.dwProductId as u16,
+            usage_page: di.usUsagePage as u16,
+            usage: di.usUsage as u16,
         }
     }
 }
@@ -157,4 +182,30 @@ pub fn get_device_info(handle: HANDLE) -> Result<DeviceInfo> {
 
     let device_info = unsafe { DeviceInfo::from(rid_device_info.u.hid()) };
     Ok(device_info)
+}
+
+struct RawHID<'a> {
+    size: usize,
+    count: usize,
+    buffer: &'a [u8],
+}
+
+impl<'a> From<&'a RAWHID> for RawHID<'a> {
+    fn from(hid: &'a RAWHID) -> Self {
+        let size = hid.dwSizeHid as usize * hid.dwCount as usize;
+        let buffer = unsafe { std::slice::from_raw_parts(hid.bRawData.as_ptr(), size) };
+        Self {
+            size: hid.dwSizeHid as _,
+            count: hid.dwCount as _,
+            buffer,
+        }
+    }
+}
+
+impl<'a> Index<usize> for RawHID<'a> {
+    type Output = [u8];
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.buffer[index * self.size..(index + 1) * self.size]
+    }
 }
