@@ -45,34 +45,37 @@ impl WindowProc for TPMiddle {
             return Err(WindowProcError::UnhandledMessage);
         }
 
-        let event = if let Ok(event) = self.event_reader.read_from_raw_input(l_param as HRAWINPUT) {
-            event
+        let events = if let Ok(events) = self.event_reader.read_from_raw_input(l_param as HRAWINPUT)
+        {
+            events
         } else {
             return Ok(0);
         };
 
-        match event {
-            Event::ButtonDown => {
-                self.state = State::MiddleDown {
-                    time: Instant::now(),
-                };
-            }
-            Event::ButtonUp => {
-                self.control.stop();
-                if let State::MiddleDown { time } = self.state {
-                    let now = Instant::now();
-                    if now <= time + MAX_MIDDLE_CLICK_DURATION {
-                        send_click(3);
-                    }
+        for event in events {
+            match event {
+                Event::ButtonDown => {
+                    self.state = State::MiddleDown {
+                        time: Instant::now(),
+                    };
                 }
-                self.state = State::MiddleUp;
-            }
-            Event::Vertical(dy) => {
-                self.control.scroll(MOUSEEVENTF_WHEEL, dy);
-            }
-            Event::Horizontal(dx) => {
-                self.state = State::Scroll;
-                self.control.scroll(MOUSEEVENTF_HWHEEL, dx);
+                Event::ButtonUp => {
+                    self.control.stop();
+                    if let State::MiddleDown { time } = self.state {
+                        let now = Instant::now();
+                        if now <= time + MAX_MIDDLE_CLICK_DURATION {
+                            send_click(3);
+                        }
+                    }
+                    self.state = State::MiddleUp;
+                }
+                Event::Vertical(dy) => {
+                    self.control.scroll(MOUSEEVENTF_WHEEL, dy);
+                }
+                Event::Horizontal(dx) => {
+                    self.state = State::Scroll;
+                    self.control.scroll(MOUSEEVENTF_HWHEEL, dx);
+                }
             }
         }
 
