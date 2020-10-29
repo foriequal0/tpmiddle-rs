@@ -1,7 +1,5 @@
-use std::ops::Index;
-
-use aligned::{Aligned, A8};
 use anyhow::*;
+use log::*;
 use winapi::ctypes::c_int;
 use winapi::shared::minwindef::{DWORD, LPVOID, UINT};
 use winapi::shared::ntdef::{HANDLE, NULL};
@@ -12,7 +10,7 @@ use winapi::um::winuser::{
     RIM_TYPEHID,
 };
 
-use crate::hid::{DeviceInfo, PID_USB};
+use crate::hid::DeviceInfo;
 
 pub fn send_click(button: DWORD) {
     let mut input0: INPUT = Default::default();
@@ -81,7 +79,7 @@ impl<'a> EventReader<'a> {
 }
 
 impl<'a> EventReader<'a> {
-    fn read_hid(&mut self, l_param: HRAWINPUT) -> Result<(DeviceInfo, RawHID<'a>), ()> {
+    fn read_hid(&mut self, l_param: HRAWINPUT) -> Result<RawHID, ()> {
         unsafe {
             const SIZE: UINT = std::mem::size_of::<RAWINPUTHEADER>() as _;
             let mut size = 0;
@@ -115,38 +113,39 @@ impl<'a> EventReader<'a> {
                 return Err(());
             }
 
-            Ok((device_info, RawHID::from((*raw).data.hid())))
+            Ok(RawHID::from((*raw).data.hid()))
         }
     }
 
-    pub fn read_from_raw_input(&mut self, l_param: HRAWINPUT) -> Result<Event, ()> {
-        let (device_info, hid) = self.read_hid(l_param)?;
-        assert_eq!(hid.count, 1);
-        if hid[0][0] == 0x15 {
-            if device_info.product_id == PID_USB {
-                debug_assert_eq!(hid.size, 3);
+    pub fn read_from_raw_input<'s>(
+        &'s mut self,
+        l_param: HRAWINPUT,
+    ) -> Result<impl Iterator<Item = Event> + 's, ()> {
+        let hid = self.read_hid(l_param)?;
+        let result = hid.iter().filter_map(|packet| {
+            if packet[0] == 0x15 {
+                if packet[2] & 0x04 != 0x00 {
+                    Some(Event::ButtonDown)
+                } else {
+                    Some(Event::ButtonUp)
+                }
+            } else if packet[0] == 0x22 || packet[0] == 0x16 {
+                let dx = packet[1] as i8;
+                let dy = packet[2] as i8;
+                if dx != 0 {
+                    Some(Event::Horizontal(dx))
+                } else if dy != 0 {
+                    Some(Event::Vertical(dy))
+                } else {
+                    warn!("Diagonal is unexpected");
+                    None
+                }
             } else {
-                debug_assert_eq!(hid.size, 9);
+                warn!("Unexpected packet ID: {:x}", packet[0]);
+                None
             }
-            if hid[0][2] & 0x04 != 0x00 {
-                Ok(Event::ButtonDown)
-            } else {
-                Ok(Event::ButtonUp)
-            }
-        } else if hid[0][0] == 0x22 || hid[0][0] == 0x16 {
-            debug_assert_eq!(hid.size, 3);
-            let dx = hid[0][1] as i8;
-            let dy = hid[0][2] as i8;
-            if dx != 0 {
-                Ok(Event::Horizontal(dx))
-            } else if dy != 0 {
-                Ok(Event::Vertical(dy))
-            } else {
-                unreachable!();
-            }
-        } else {
-            Err(())
-        }
+        });
+        Ok(result)
     }
 }
 
@@ -186,7 +185,6 @@ pub fn get_device_info(handle: HANDLE) -> Result<DeviceInfo> {
 
 struct RawHID<'a> {
     size: usize,
-    count: usize,
     buffer: &'a [u8],
 }
 
@@ -196,16 +194,13 @@ impl<'a> From<&'a RAWHID> for RawHID<'a> {
         let buffer = unsafe { std::slice::from_raw_parts(hid.bRawData.as_ptr(), size) };
         Self {
             size: hid.dwSizeHid as _,
-            count: hid.dwCount as _,
             buffer,
         }
     }
 }
 
-impl<'a> Index<usize> for RawHID<'a> {
-    type Output = [u8];
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.buffer[index * self.size..(index + 1) * self.size]
+impl<'a> RawHID<'a> {
+    fn iter(&self) -> std::slice::ChunksExact<'a, u8> {
+        self.buffer.chunks_exact(self.size)
     }
 }
