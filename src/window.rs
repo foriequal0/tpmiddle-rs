@@ -149,7 +149,7 @@ extern "system" fn window_proc<T: WindowProc>(
             Ok(result) => result,
             Err(WindowProcError::UnhandledMessage) => DefWindowProcW(hwnd, u_msg, w_param, l_param),
             Err(err) => {
-                error!("{:?}", err);
+                eprintln!("Error: {:?}", err);
                 PostQuitMessage(-1);
                 0
             }
