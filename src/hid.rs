@@ -111,6 +111,7 @@ pub const DEVICE_INFO_WHEEL_HID_BT: DeviceInfo = DeviceInfo {
 pub const DEVICE_INFOS_NOTIFY: &[DeviceInfo] = &[
     DEVICE_INFO_MIDDLE_BUTTON_HID_USB,
     DEVICE_INFO_MIDDLE_BUTTON_HID_BT,
+    DEVICE_INFO_WHEEL_HID_BT,
 ];
 
 pub const DEVICE_INFOS_SINK: &[DeviceInfo] = &[

@@ -10,8 +10,8 @@ use winapi::um::winuser::{GIDC_ARRIVAL, GIDC_REMOVAL, WM_INPUT_DEVICE_CHANGE};
 use crate::args::Args;
 use crate::bt_wheel_blocker::WheelBlocker;
 use crate::hid;
-use crate::hid::{DeviceInfo, Transport, DEVICE_INFO_WHEEL_HID_BT};
-use crate::input::get_device_info;
+use crate::hid::{DeviceInfo, Transport, PID_BT, VID_LENOVO};
+use crate::input::get_hid_device_info;
 use crate::tpmiddle::TPMiddle;
 use crate::window::{WindowProc, WindowProcError, WindowProcResult};
 
@@ -86,7 +86,7 @@ impl<'a> TransportAgnosticTPMiddle<'a> {
                 ConnectionState::USB { tpmiddle }
             }
             Transport::BT => {
-                let wheel_blocker = WheelBlocker::new(&DEVICE_INFO_WHEEL_HID_BT)?;
+                let wheel_blocker = WheelBlocker::new(VID_LENOVO, PID_BT)?;
                 let tpmiddle =
                     TPMiddle::new(transport.device_info(), self.args.scroll.create_control());
                 ConnectionState::BT {
@@ -96,6 +96,13 @@ impl<'a> TransportAgnosticTPMiddle<'a> {
             }
         };
 
+        Ok(())
+    }
+
+    fn on_mouse_device_change(&mut self) -> Result<()> {
+        if let ConnectionState::BT { wheel_blocker, .. } = &mut self.state {
+            wheel_blocker.rescan_target_device_handle()?;
+        }
         Ok(())
     }
 }
@@ -112,30 +119,36 @@ impl<'a> WindowProc for TransportAgnosticTPMiddle<'a> {
             WM_INPUT_DEVICE_CHANGE if w_param as DWORD == GIDC_ARRIVAL => {
                 let handle = l_param as _;
                 trace!("ARRIVAL: {:?}", handle);
-                let device_info = match get_device_info(handle) {
-                    Ok(device_info) => device_info,
+
+                match get_hid_device_info(handle) {
+                    Ok(Some(device_info)) => {
+                        debug!("ARRIVAL: {:?}, {:?}", device_info, device_info.transport());
+                        if !self.notify_devices.iter().any(|x| x == &device_info) {
+                            return Ok(0);
+                        }
+
+                        self.devices.insert(handle, device_info);
+                        debug!("ARRIVAL: OK");
+
+                        if let ConnectionState::Disconnected = self.state {
+                            self.try_connect_bt_then_usb();
+                        } else if matches!(self.state, ConnectionState::USB{..})
+                            && device_info.transport() == Some(Transport::BT)
+                        {
+                            // The wireless dongle is still connected, but the keyboard is changed to Bluetooth.
+                            self.try_connect_over(Transport::BT);
+                        }
+                    }
+                    Ok(None) => {
+                        self.on_mouse_device_change()?;
+                    }
                     Err(err) => {
                         // The device is spuriously disconnected before handling this message
                         debug!("Error while get device info: {}", err);
                         return Ok(0);
                     }
                 };
-                debug!("ARRIVAL: {:?}, {:?}", device_info, device_info.transport());
-                if !self.notify_devices.iter().any(|x| x == &device_info) {
-                    return Ok(0);
-                }
 
-                self.devices.insert(handle, device_info);
-                debug!("ARRIVAL: OK");
-
-                if let ConnectionState::Disconnected = self.state {
-                    self.try_connect_bt_then_usb();
-                } else if matches!(self.state, ConnectionState::USB{..})
-                    && device_info.transport() == Some(Transport::BT)
-                {
-                    // The wireless dongle is still connected, but the keyboard is changed to Bluetooth.
-                    self.try_connect_over(Transport::BT);
-                }
                 Ok(0)
             }
             WM_INPUT_DEVICE_CHANGE if w_param as DWORD == GIDC_REMOVAL => {

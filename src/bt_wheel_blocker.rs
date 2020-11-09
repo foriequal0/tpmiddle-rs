@@ -4,6 +4,7 @@ use std::time::Duration;
 use aligned::{Aligned, A8};
 use anyhow::*;
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
+use log::*;
 use winapi::ctypes::c_int;
 use winapi::shared::minwindef::{DWORD, LPARAM, UINT, WPARAM};
 use winapi::shared::ntdef::{HANDLE, NULL};
@@ -12,26 +13,30 @@ use winapi::um::sysinfoapi::GetTickCount;
 use winapi::um::winuser::{
     GetRawInputData, GetRawInputDeviceInfoW, GetRawInputDeviceList, PostMessageW, PostQuitMessage,
     LLMHF_INJECTED, LLMHF_LOWER_IL_INJECTED, MSLLHOOKSTRUCT, RAWINPUT, RAWINPUTDEVICELIST,
-    RAWINPUTHEADER, RIDI_DEVICENAME, RID_INPUT, RIM_TYPEMOUSE, RI_MOUSE_WHEEL, WM_INPUT,
-    WM_MOUSEWHEEL, WM_USER,
+    RAWINPUTHEADER, RIDI_DEVICEINFO, RIDI_DEVICENAME, RID_DEVICE_INFO, RID_INPUT, RIM_TYPEMOUSE,
+    RI_MOUSE_WHEEL, WM_INPUT, WM_MOUSEWHEEL, WM_USER,
 };
 
-use crate::hid::DeviceInfo;
 use crate::hook::{HookProc, HookProcError, HookProcResult, LowLevelMouseHook};
 use crate::util::ForceSendSync;
 use crate::window::{Window, WindowProc, WindowProcError, WindowProcResult};
 
 pub struct WheelBlocker {
+    vendor_id: u16,
+    product_id: u16,
     target_device_handle: HANDLE,
     hook_thread: HookThread,
 }
 
 impl WheelBlocker {
-    pub fn new(target_device: &DeviceInfo) -> Result<Self> {
-        let target_device_handle = get_target_device_handle(target_device)?;
+    pub fn new(vendor_id: u16, product_id: u16) -> Result<Self> {
+        let target_device_handle = get_target_device_handle(vendor_id, product_id)?;
+        trace!("WheelBlocker blocks: {:p}", target_device_handle);
         let hook_thread = HookThread::new()?;
 
         Ok(Self {
+            vendor_id,
+            product_id,
             target_device_handle,
             hook_thread,
         })
@@ -75,12 +80,21 @@ impl WheelBlocker {
             return;
         }
 
-        self.hook_thread
-            .block(header.hDevice == self.target_device_handle);
+        let block = self.target_device_handle == header.hDevice;
+        self.hook_thread.block(block);
+    }
+
+    pub fn rescan_target_device_handle(&mut self) -> Result<()> {
+        let target = get_target_device_handle(self.vendor_id, self.product_id)?;
+        if target != self.target_device_handle {
+            self.target_device_handle = target;
+            trace!("WheelBlocker blocks: {:p}", self.target_device_handle);
+        }
+        Ok(())
     }
 }
 
-fn get_target_device_handle(target_device: &DeviceInfo) -> Result<HANDLE> {
+fn get_target_device_handle(vid: u16, pid: u16) -> Result<HANDLE> {
     const SIZE: UINT = std::mem::size_of::<RAWINPUTDEVICELIST>() as _;
     let mut num_devices = 0;
     c_try_ne!(
@@ -94,12 +108,13 @@ fn get_target_device_handle(target_device: &DeviceInfo) -> Result<HANDLE> {
     )?;
 
     // TODO: Figure out why 02 is prefixed
-    let target_device_vid_pid = format!(
-        "VID&02{:04x}_PID&{:04x}",
-        target_device.vendor_id, target_device.product_id
-    );
+    let target_device_vid_pid = format!("VID&02{:04x}_PID&{:04x}", vid, pid);
 
     for device in devices {
+        if !is_mouse(device.hDevice)? {
+            continue;
+        }
+
         let mut size = 0;
         c_try_ne!(
             -1i32 as _,
@@ -122,6 +137,22 @@ fn get_target_device_handle(target_device: &DeviceInfo) -> Result<HANDLE> {
     }
 
     Err(anyhow!("Device not found"))
+}
+
+fn is_mouse(device_handle: HANDLE) -> Result<bool> {
+    let mut rid_device_info: RID_DEVICE_INFO = Default::default();
+    let mut size = std::mem::size_of_val(&rid_device_info) as UINT;
+    rid_device_info.cbSize = size;
+    c_try_ne!(
+        (-1i32) as UINT,
+        GetRawInputDeviceInfoW(
+            device_handle,
+            RIDI_DEVICEINFO,
+            &mut rid_device_info as *mut RID_DEVICE_INFO as _,
+            &mut size,
+        )
+    )?;
+    Ok(rid_device_info.dwType == RIM_TYPEMOUSE)
 }
 
 struct BlockMessage {

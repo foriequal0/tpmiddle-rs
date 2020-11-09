@@ -108,7 +108,12 @@ impl<'a> EventReader<'a> {
                 return Err(());
             }
 
-            let device_info = get_device_info(header.hDevice).map_err(|_| ())?;
+            let device_info = if let Ok(Some(device_info)) = get_hid_device_info(header.hDevice) {
+                device_info
+            } else {
+                return Err(());
+            };
+
             if !self.device_filter.iter().any(|x| *x == device_info) {
                 return Err(());
             }
@@ -160,7 +165,7 @@ impl From<&RID_DEVICE_INFO_HID> for DeviceInfo {
     }
 }
 
-pub fn get_device_info(handle: HANDLE) -> Result<DeviceInfo> {
+pub fn get_hid_device_info(handle: HANDLE) -> Result<Option<DeviceInfo>> {
     let mut rid_device_info: RID_DEVICE_INFO = Default::default();
     let mut size = std::mem::size_of_val(&rid_device_info) as UINT;
     rid_device_info.cbSize = size;
@@ -174,13 +179,12 @@ pub fn get_device_info(handle: HANDLE) -> Result<DeviceInfo> {
         )
     )?;
 
-    ensure!(
-        rid_device_info.dwType == RIM_TYPEHID,
-        "Requested device is not HID"
-    );
+    if rid_device_info.dwType != RIM_TYPEHID {
+        return Ok(None);
+    }
 
     let device_info = unsafe { DeviceInfo::from(rid_device_info.u.hid()) };
-    Ok(device_info)
+    Ok(Some(device_info))
 }
 
 struct RawHID<'a> {
