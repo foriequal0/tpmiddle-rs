@@ -9,7 +9,6 @@ use winapi::um::winuser::{GIDC_ARRIVAL, GIDC_REMOVAL, WM_INPUT_DEVICE_CHANGE};
 
 use crate::args::Args;
 use crate::bt_wheel_blocker::WheelBlocker;
-use crate::control::ScrollControlType;
 use crate::hid;
 use crate::hid::{DeviceInfo, Transport, DEVICE_INFO_WHEEL_HID_BT};
 use crate::input::get_device_info;
@@ -22,7 +21,7 @@ enum ConnectionState {
         tpmiddle: TPMiddle,
     },
     BT {
-        wheel_blocker: Option<WheelBlocker>,
+        wheel_blocker: WheelBlocker,
         tpmiddle: TPMiddle,
     },
 }
@@ -87,16 +86,9 @@ impl<'a> TransportAgnosticTPMiddle<'a> {
                 ConnectionState::USB { tpmiddle }
             }
             Transport::BT => {
-                let (wheel_blocker, scroll) = if self.args.scroll == ScrollControlType::Smooth {
-                    (
-                        Some(WheelBlocker::new(&DEVICE_INFO_WHEEL_HID_BT)?),
-                        ScrollControlType::Smooth,
-                    )
-                } else {
-                    (None, ScrollControlType::ClassicHorizontalOnly)
-                };
-
-                let tpmiddle = TPMiddle::new(transport.device_info(), scroll.create_control());
+                let wheel_blocker = WheelBlocker::new(&DEVICE_INFO_WHEEL_HID_BT)?;
+                let tpmiddle =
+                    TPMiddle::new(transport.device_info(), self.args.scroll.create_control());
                 ConnectionState::BT {
                     wheel_blocker,
                     tpmiddle,
@@ -175,9 +167,7 @@ impl<'a> WindowProc for TransportAgnosticTPMiddle<'a> {
                     wheel_blocker,
                     tpmiddle,
                 } => {
-                    if let Some(wheel_blocker) = wheel_blocker {
-                        wheel_blocker.peek_message(u_msg, l_param);
-                    }
+                    wheel_blocker.peek_message(u_msg, l_param);
                     tpmiddle.proc(hwnd, u_msg, w_param, l_param)
                 }
                 _ => Err(WindowProcError::UnhandledMessage),
