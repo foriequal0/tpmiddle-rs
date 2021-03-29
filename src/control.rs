@@ -45,6 +45,7 @@ impl ScrollControlType {
 }
 
 pub trait ScrollControl {
+    fn middle_click(&self);
     fn tick(&self, tick: Wheel<Tick<i8>>);
     fn stop(&self);
 }
@@ -68,6 +69,10 @@ mod classic {
     where
         HAL: MouseHAL,
     {
+        fn middle_click(&self) {
+            HAL::send_middle_click();
+        }
+
         fn tick(&self, tick: Wheel<Tick<i8>>) {
             HAL::send_wheel(tick.into_delta());
         }
@@ -149,6 +154,10 @@ mod smooth {
     where
         HAL: MouseHAL,
     {
+        fn middle_click(&self) {
+            HAL::send_middle_click();
+        }
+
         fn tick(&self, tick: Wheel<Tick<i8>>) {
             let sender = self.sender.as_ref().unwrap();
             sender

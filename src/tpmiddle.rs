@@ -1,5 +1,3 @@
-use std::time::{Duration, Instant};
-
 use winapi::shared::minwindef::{LPARAM, UINT, WPARAM};
 use winapi::shared::windef::HWND;
 use winapi::um::winuser::{HRAWINPUT, WM_INPUT};
@@ -7,21 +5,12 @@ use winapi::um::winuser::{HRAWINPUT, WM_INPUT};
 use crate::control::ScrollControl;
 use crate::hid::DeviceInfo;
 use crate::input::{Event, EventReader};
-use crate::mouse_hal::MouseHAL;
-use crate::mouse_hal_impl::MouseHALImpl;
+use crate::middle_button_state::MiddleButtonState;
 use crate::units::{Tick, Wheel};
 use crate::window::{WindowProc, WindowProcError, WindowProcResult};
 
-const MAX_MIDDLE_CLICK_DURATION: Duration = Duration::from_millis(500);
-
-enum State {
-    Idle,
-    MiddleDown { time: Instant },
-    Scroll,
-}
-
 pub struct TPMiddle {
-    state: State,
+    middle_button_state: MiddleButtonState,
     control: Box<dyn ScrollControl>,
     event_reader: EventReader<'static>,
 }
@@ -29,7 +18,7 @@ pub struct TPMiddle {
 impl TPMiddle {
     pub fn new(device_filter: &'static [DeviceInfo], control: Box<dyn ScrollControl>) -> Self {
         TPMiddle {
-            state: State::Idle,
+            middle_button_state: MiddleButtonState::Idle,
             control,
             event_reader: EventReader::new(device_filter),
         }
@@ -57,27 +46,19 @@ impl WindowProc for TPMiddle {
 
         for event in events {
             match event {
-                Event::ButtonDown => {
-                    self.state = State::MiddleDown {
-                        time: Instant::now(),
-                    };
-                }
+                Event::ButtonDown => self.middle_button_state.down(),
                 Event::ButtonUp => {
                     self.control.stop();
-                    if let State::MiddleDown { time } = self.state {
-                        let now = Instant::now();
-                        if now <= time + MAX_MIDDLE_CLICK_DURATION {
-                            MouseHALImpl::send_middle_click();
-                        }
+                    if self.middle_button_state.up() {
+                        self.control.middle_click();
                     }
-                    self.state = State::Idle;
                 }
                 Event::Vertical(dy) => {
-                    self.state = State::Scroll;
+                    self.middle_button_state.scroll();
                     self.control.tick(Wheel::Vertical(Tick::from_raw(dy)));
                 }
                 Event::Horizontal(dx) => {
-                    self.state = State::Scroll;
+                    self.middle_button_state.scroll();
                     self.control.tick(Wheel::Horizontal(Tick::from_raw(dx)));
                 }
             }

@@ -9,6 +9,7 @@ mod control;
 mod hid;
 mod hook;
 mod input;
+mod middle_button_state;
 mod mouse_hal;
 mod mouse_hal_impl;
 mod tpmiddle;
