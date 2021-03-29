@@ -6,7 +6,9 @@ use winapi::um::winuser::{HRAWINPUT, WM_INPUT};
 
 use crate::control::ScrollControl;
 use crate::hid::DeviceInfo;
-use crate::input::{send_click, Event, EventReader};
+use crate::input::{Event, EventReader};
+use crate::mouse_hal::MouseHAL;
+use crate::mouse_hal_impl::MouseHALImpl;
 use crate::units::{Tick, Wheel};
 use crate::window::{WindowProc, WindowProcError, WindowProcResult};
 
@@ -65,7 +67,7 @@ impl WindowProc for TPMiddle {
                     if let State::MiddleDown { time } = self.state {
                         let now = Instant::now();
                         if now <= time + MAX_MIDDLE_CLICK_DURATION {
-                            send_click(3);
+                            MouseHALImpl::send_middle_click();
                         }
                     }
                     self.state = State::Idle;

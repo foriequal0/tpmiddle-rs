@@ -12,6 +12,7 @@ use crate::bt_wheel_blocker::WheelBlocker;
 use crate::hid;
 use crate::hid::{DeviceInfo, Transport, PID_BT, VID_LENOVO};
 use crate::input::get_hid_device_info;
+use crate::mouse_hal_impl::MouseHALImpl;
 use crate::tpmiddle::TPMiddle;
 use crate::window::{WindowProc, WindowProcError, WindowProcResult};
 
@@ -81,14 +82,18 @@ impl<'a> TransportAgnosticTPMiddle<'a> {
 
         self.state = match transport {
             Transport::USB => {
-                let tpmiddle =
-                    TPMiddle::new(transport.device_info(), self.args.scroll.create_control());
+                let tpmiddle = TPMiddle::new(
+                    transport.device_info(),
+                    self.args.scroll.create_control::<MouseHALImpl>(),
+                );
                 ConnectionState::USB { tpmiddle }
             }
             Transport::BT => {
                 let wheel_blocker = WheelBlocker::new(VID_LENOVO, PID_BT)?;
-                let tpmiddle =
-                    TPMiddle::new(transport.device_info(), self.args.scroll.create_control());
+                let tpmiddle = TPMiddle::new(
+                    transport.device_info(),
+                    self.args.scroll.create_control::<MouseHALImpl>(),
+                );
                 ConnectionState::BT {
                     wheel_blocker,
                     tpmiddle,
@@ -132,7 +137,7 @@ impl<'a> WindowProc for TransportAgnosticTPMiddle<'a> {
 
                         if let ConnectionState::Disconnected = self.state {
                             self.try_connect_bt_then_usb();
-                        } else if matches!(self.state, ConnectionState::USB{..})
+                        } else if matches!(self.state, ConnectionState::USB { .. })
                             && device_info.transport() == Some(Transport::BT)
                         {
                             // The wireless dongle is still connected, but the keyboard is changed to Bluetooth.

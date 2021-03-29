@@ -1,58 +1,13 @@
 use anyhow::*;
 use log::*;
-use winapi::ctypes::c_int;
-use winapi::shared::minwindef::{DWORD, LPVOID, UINT};
+use winapi::shared::minwindef::{LPVOID, UINT};
 use winapi::shared::ntdef::{HANDLE, NULL};
 use winapi::um::winuser::{
-    GetRawInputData, GetRawInputDeviceInfoW, SendInput, HRAWINPUT, INPUT, INPUT_MOUSE,
-    MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, RAWHID,
-    RAWINPUT, RAWINPUTHEADER, RIDI_DEVICEINFO, RID_DEVICE_INFO, RID_DEVICE_INFO_HID, RID_INPUT,
-    RIM_TYPEHID,
+    GetRawInputData, GetRawInputDeviceInfoW, HRAWINPUT, RAWHID, RAWINPUT, RAWINPUTHEADER,
+    RIDI_DEVICEINFO, RID_DEVICE_INFO, RID_DEVICE_INFO_HID, RID_INPUT, RIM_TYPEHID,
 };
 
 use crate::hid::DeviceInfo;
-
-pub fn send_click(button: DWORD) {
-    let mut input0: INPUT = Default::default();
-    let mut input1: INPUT = Default::default();
-    input0.type_ = INPUT_MOUSE;
-    input1.type_ = INPUT_MOUSE;
-
-    unsafe {
-        let mi0 = input0.u.mi_mut();
-        let mi1 = input1.u.mi_mut();
-
-        if button == 3 {
-            mi0.dwFlags = MOUSEEVENTF_MIDDLEDOWN;
-            mi1.dwFlags = MOUSEEVENTF_MIDDLEUP;
-        } else {
-            mi0.dwFlags = MOUSEEVENTF_XDOWN;
-            mi0.mouseData = button - 3;
-            mi1.dwFlags = MOUSEEVENTF_XUP;
-            mi1.mouseData = button - 3;
-        }
-
-        let mut input = [input0, input1];
-        SendInput(
-            input.len() as UINT,
-            input.as_mut_ptr(),
-            std::mem::size_of::<INPUT>() as c_int,
-        );
-    }
-}
-
-pub fn send_wheel(event: DWORD, mouse_data: DWORD) {
-    let mut input: INPUT = Default::default();
-
-    unsafe {
-        input.type_ = INPUT_MOUSE;
-        let mi = input.u.mi_mut();
-        mi.dwFlags = event;
-        mi.mouseData = mouse_data;
-
-        SendInput(1, &mut input, std::mem::size_of::<INPUT>() as c_int);
-    }
-}
 
 #[derive(Debug)]
 pub enum Event {

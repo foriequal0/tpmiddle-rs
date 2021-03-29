@@ -9,6 +9,8 @@ mod control;
 mod hid;
 mod hook;
 mod input;
+mod mouse_hal;
+mod mouse_hal_impl;
 mod tpmiddle;
 mod transport_agnostic_tpmiddle;
 mod units;

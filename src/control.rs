@@ -1,9 +1,9 @@
+use std::marker::PhantomData;
 use std::str::FromStr;
 
 use thiserror::*;
-use winapi::um::winuser::{MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL};
 
-use crate::input::send_wheel;
+use crate::mouse_hal::MouseHAL;
 use crate::units::{Delta, Direction, Tick, Wheel};
 
 #[derive(Eq, PartialEq, Copy, Clone)]
@@ -33,10 +33,13 @@ impl FromStr for ScrollControlType {
 }
 
 impl ScrollControlType {
-    pub(crate) fn create_control(&self) -> Box<dyn ScrollControl> {
+    pub(crate) fn create_control<HAL>(&self) -> Box<dyn ScrollControl>
+    where
+        HAL: 'static + MouseHAL,
+    {
         match self {
-            ScrollControlType::Classic => Box::new(classic::ClassicController),
-            ScrollControlType::Smooth => Box::new(smooth::SmoothController::new()),
+            ScrollControlType::Classic => Box::new(classic::ClassicController::<HAL>::new()),
+            ScrollControlType::Smooth => Box::new(smooth::SmoothController::<HAL>::new()),
         }
     }
 }
@@ -48,14 +51,25 @@ pub trait ScrollControl {
 
 mod classic {
     use super::*;
-    pub struct ClassicController;
 
-    impl ScrollControl for ClassicController {
-        fn tick(&self, tick: Wheel<Tick<i8>>) {
-            match tick.into_delta() {
-                Wheel::Vertical(delta) => send_wheel(MOUSEEVENTF_WHEEL, delta.raw() as _),
-                Wheel::Horizontal(delta) => send_wheel(MOUSEEVENTF_HWHEEL, delta.raw() as _),
+    pub struct ClassicController<HAL> {
+        _phantom: PhantomData<HAL>,
+    }
+
+    impl<HAL> ClassicController<HAL> {
+        pub fn new() -> Self {
+            Self {
+                _phantom: Default::default(),
             }
+        }
+    }
+
+    impl<HAL> ScrollControl for ClassicController<HAL>
+    where
+        HAL: MouseHAL,
+    {
+        fn tick(&self, tick: Wheel<Tick<i8>>) {
+            HAL::send_wheel(tick.into_delta());
         }
 
         fn stop(&self) {}
@@ -82,12 +96,16 @@ mod smooth {
     /// Time to fully drain the buffer into the reservoir.
     const BUFFER_MAX_DRAIN_DURATION_SECS: f32 = 0.05;
 
-    pub struct SmoothController {
+    pub struct SmoothController<HAL> {
         sender: Option<Sender<Event>>,
         join_handle: Option<JoinHandle<()>>,
+        _phantom: PhantomData<HAL>,
     }
 
-    impl SmoothController {
+    impl<HAL> SmoothController<HAL>
+    where
+        HAL: MouseHAL,
+    {
         pub fn new() -> Self {
             let ticker = Ticker::new(WHEEL_TICK_FREQ);
             let (sender, receiver) = bounded(1);
@@ -96,8 +114,7 @@ mod smooth {
                 crossbeam_channel::select! {
                     recv(ticker.receiver) -> _ => {
                         match state.tick() {
-                            Some(Wheel::Vertical(delta)) => send_wheel(MOUSEEVENTF_WHEEL, delta.raw() as _),
-                            Some(Wheel::Horizontal(delta)) => send_wheel(MOUSEEVENTF_HWHEEL, delta.raw() as _),
+                            Some(delta) => HAL::send_wheel(delta),
                             None => ticker.stop(),
                         }
                     }
@@ -123,11 +140,15 @@ mod smooth {
             Self {
                 sender: Some(sender),
                 join_handle: Some(join_handle),
+                _phantom: Default::default(),
             }
         }
     }
 
-    impl ScrollControl for SmoothController {
+    impl<HAL> ScrollControl for SmoothController<HAL>
+    where
+        HAL: MouseHAL,
+    {
         fn tick(&self, tick: Wheel<Tick<i8>>) {
             let sender = self.sender.as_ref().unwrap();
             sender
@@ -143,7 +164,7 @@ mod smooth {
         }
     }
 
-    impl Drop for SmoothController {
+    impl<HAL> Drop for SmoothController<HAL> {
         fn drop(&mut self) {
             std::mem::drop(self.sender.take());
             if let Some(join_handle) = self.join_handle.take() {
