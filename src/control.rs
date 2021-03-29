@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use anyhow::*;
+use thiserror::*;
 use winapi::um::winuser::{MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL};
 
 use crate::input::send_wheel;
@@ -12,14 +12,22 @@ pub enum ScrollControlType {
     Smooth,
 }
 
+#[derive(Error, Debug)]
+pub enum ScrollControlTypeParseError {
+    #[error("`{0}` is an invalid type")]
+    InvalidScrollControlType(String),
+}
+
 impl FromStr for ScrollControlType {
-    type Err = anyhow::Error;
+    type Err = ScrollControlTypeParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "classic" => Ok(ScrollControlType::Classic),
             "smooth" => Ok(ScrollControlType::Smooth),
-            _ => Err(anyhow!("`{}` is an invalid type", s)),
+            _ => Err(ScrollControlTypeParseError::InvalidScrollControlType(
+                s.to_owned(),
+            )),
         }
     }
 }
