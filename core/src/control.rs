@@ -33,7 +33,7 @@ impl FromStr for ScrollControlType {
 }
 
 impl ScrollControlType {
-    pub(crate) fn create_control<HAL>(&self) -> Box<dyn ScrollControl>
+    pub fn create_control<HAL>(&self) -> Box<dyn ScrollControl>
     where
         HAL: 'static + MouseHAL,
     {

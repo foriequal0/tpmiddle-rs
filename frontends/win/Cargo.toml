@@ -1,0 +1,33 @@
+[package]
+name = "frontend"
+version = "0.1.0"
+authors = ["SeongChan Lee <foriequal@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+core = { path = "../../core" }
+anyhow = "^1.0.32"
+thiserror = "^1.0.21"
+log = "^0.4.11"
+field-offset = "^0.3.2"
+aligned = "^0.3.4"
+crossbeam-channel = "^0.4.4"
+lazy_static = "^1.4.0"
+
+[dependencies.winapi]
+version = "^0.3.9"
+features = [
+    "basetsd",
+    "minwindef",
+    "ntdef",
+    "winbase",
+    "winuser",
+    "windef",
+    "wincon",
+    "errhandlingapi",
+    "sysinfoapi",
+    "libloaderapi",
+    "impl-default"
+]

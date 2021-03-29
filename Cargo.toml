@@ -7,14 +7,9 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+core = { path = "./core" }
 anyhow = "^1.0.32"
-thiserror = "^1.0.21"
-field-offset = "^0.3.2"
-aligned = "^0.3.4"
-crossbeam-channel = "^0.4.4"
-hidapi = "^1.2.3"
-spin_sleep = "^1.0.0"
-lazy_static = "^1.4.0"
+clap = "^3.0.0-beta.2"
 log = "^0.4.11"
 slog = "^2.5.2"
 slog-scope = "^4.3.0"
@@ -22,26 +17,11 @@ slog-term = "^2.6.0"
 slog-stdlog = "^4.1.0"
 slog-envlogger = "^2.2.0"
 
-[dependencies.winapi]
-version = "^0.3.9"
-features = [
-    "basetsd",
-    "minwindef",
-    "ntdef",
-    "winbase",
-    "winuser",
-    "windef",
-    "wincon",
-    "errhandlingapi",
-    "sysinfoapi",
-    "libloaderapi",
-    "impl-default"
-]
+[target.'cfg(windows)'.dependencies]
+frontend = { path = "frontends/win" }
 
-[dependencies.clap]
-version = "^3.0.0-beta.2"
-default-features = false
-features = [
-    "std",
-    "derive"
+[workspace]
+members = [
+    "core",
+    "frontends/*"
 ]

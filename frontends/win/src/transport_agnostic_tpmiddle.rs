@@ -7,11 +7,11 @@ use winapi::shared::ntdef::HANDLE;
 use winapi::shared::windef::HWND;
 use winapi::um::winuser::{GIDC_ARRIVAL, GIDC_REMOVAL, WM_INPUT_DEVICE_CHANGE};
 
-use crate::args::Args;
+use core::args::Args;
+use core::hid::{self, DeviceInfo, Transport, PID_BT, VID_LENOVO};
+
 use crate::bt_wheel_blocker::WheelBlocker;
-use crate::hid;
-use crate::hid::{DeviceInfo, Transport, PID_BT, VID_LENOVO};
-use crate::input::get_hid_device_info;
+use crate::event_reader::get_hid_device_info;
 use crate::mouse_hal_impl::MouseHALImpl;
 use crate::tpmiddle::TPMiddle;
 use crate::window::{WindowProc, WindowProcError, WindowProcResult};

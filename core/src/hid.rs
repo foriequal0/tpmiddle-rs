@@ -1,10 +1,9 @@
 use std::fmt;
 use std::str::FromStr;
 
-use anyhow::*;
-use hidapi::{HidApi, HidDevice, HidResult};
-use thiserror::*;
+use hidapi::{HidApi, HidDevice, HidError, HidResult};
 use log::*;
+use thiserror::*;
 
 pub const VID_LENOVO: u16 = 0x17EF;
 pub const PID_USB: u16 = 0x60EE;
@@ -147,14 +146,20 @@ impl Transport {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum TransportParseError {
+    #[error("{0} is not a valid connection method")]
+    InvalidConnectionMethod(String),
+}
+
 impl FromStr for Transport {
-    type Err = anyhow::Error;
+    type Err = TransportParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "USB" | "usb" => Ok(Transport::USB),
             "BT" | "bt" | "bluetooth" => Ok(Transport::BT),
-            _ => bail!("{} is not a valid connection method", s),
+            _ => Err(TransportParseError::InvalidConnectionMethod(s.to_owned())),
         }
     }
 }
@@ -174,6 +179,8 @@ pub enum InitializeError {
     HidError(#[from] hidapi::HidError),
     #[error("Cannot find a keyboard over {0}")]
     CannotFindKeyboard(Transport),
+    #[error("Cannot set keyboard feature: {0}")]
+    SetKeyboardFeatureError(#[source] SetKeyboardFeatureError),
 }
 
 pub fn initialize_keyboard(
@@ -185,24 +192,31 @@ pub fn initialize_keyboard(
 
     for di in api.device_list() {
         let device_info = DeviceInfo::from(di);
-        if transport == Transport::USB && device_info == DEVICE_INFO_SET_FEATURES_USB{
+        if transport == Transport::USB && device_info == DEVICE_INFO_SET_FEATURES_USB {
             match set_keyboard_features::<USB>(&di.open_device(&api)?, sensitivity, fn_lock) {
                 Ok(()) => return Ok(()),
                 Err(err) => {
-                    info!("Failed to set keyboard feature path={path:?}, err={err:?}", path=di.path(), err = err);
-                },
+                    info!(
+                        "Failed to set keyboard feature. path={path:?}, err={err:?}",
+                        path = di.path(),
+                        err = err
+                    );
+                }
             }
-        } else if transport == Transport::BT && device_info == DEVICE_INFO_SET_FEATURES_BT
-        {
+        } else if transport == Transport::BT && device_info == DEVICE_INFO_SET_FEATURES_BT {
             match set_keyboard_features::<BT>(&di.open_device(&api)?, sensitivity, fn_lock) {
                 Ok(()) => return Ok(()),
                 Err(err) => {
-                    info!("Failed to set keyboard feature path={path:?}, err={err:?}", path=di.path(), err = err);
-                },
+                    info!(
+                        "Failed to set keyboard feature. path={path:?}, err={err:?}",
+                        path = di.path(),
+                        err = err
+                    );
+                }
             }
         }
     }
-    return Err(InitializeError::CannotFindKeyboard(transport));
+    Err(InitializeError::CannotFindKeyboard(transport))
 }
 
 trait SetFeatures {
@@ -211,18 +225,32 @@ trait SetFeatures {
     fn set_native_middle_button(device: &HidDevice, enable: bool) -> HidResult<()>;
 }
 
+#[derive(Error, Debug)]
+pub enum SetKeyboardFeatureError {
+    #[error("Cannot open device")]
+    OpenDevice(#[source] HidError),
+    #[error("Cannot set sensitivity")]
+    SetSensitivity(#[source] HidError),
+    #[error("Cannot set sensitivity")]
+    SetFnLock(#[source] HidError),
+    #[error("Cannot set sensitivity")]
+    SetNativeMiddleButton(#[source] HidError),
+}
+
 fn set_keyboard_features<T: SetFeatures>(
     device: &HidDevice,
     sensitivity: Option<u8>,
     fn_lock: Option<bool>,
-) -> Result<()> {
+) -> Result<(), SetKeyboardFeatureError> {
     if let Some(sensitivity) = sensitivity {
-        T::set_sensitivity(&device, sensitivity).context("setting sensitivity")?;
+        T::set_sensitivity(&device, sensitivity)
+            .map_err(SetKeyboardFeatureError::SetSensitivity)?;
     }
     if let Some(fn_lock) = fn_lock {
-        T::set_fn_lock(&device, fn_lock).context("setting fn lock")?;
+        T::set_fn_lock(&device, fn_lock).map_err(SetKeyboardFeatureError::SetFnLock)?;
     }
-    T::set_native_middle_button(&device, false).map_err(|err| anyhow!("cannot set native middle button: {}", err))?;
+    T::set_native_middle_button(&device, false)
+        .map_err(SetKeyboardFeatureError::SetNativeMiddleButton)?;
     Ok(())
 }
 

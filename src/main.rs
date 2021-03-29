@@ -10,14 +10,9 @@ use clap::Clap;
 use log::*;
 use slog::{Drain, Duplicate, Logger, Never};
 use slog_scope::GlobalLoggerGuard;
-use winapi::shared::minwindef::WPARAM;
-use winapi::um::processthreadsapi::{GetCurrentProcess, SetPriorityClass};
-use winapi::um::winbase::HIGH_PRIORITY_CLASS;
 
-use tpmiddle_rs::{
-    c_try, hide_console, Args, Devices, TransportAgnosticTPMiddle, Window, DEVICE_INFOS_NOTIFY,
-    DEVICE_INFOS_SINK,
-};
+use core::args::Args;
+use frontend::try_main;
 
 fn set_logger(log: Option<&str>) -> Result<GlobalLoggerGuard> {
     let file_drain: Box<dyn slog::Drain<Ok = (), Err = Never> + Send> = if let Some(log) = log {
@@ -53,17 +48,6 @@ fn set_logger(log: Option<&str>) -> Result<GlobalLoggerGuard> {
     let guard = slog_scope::set_global_logger(Logger::root(drain, o!()).into_erased());
     slog_stdlog::init()?;
     Ok(guard)
-}
-
-fn try_main(args: Args) -> Result<WPARAM> {
-    c_try!(SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS))?;
-
-    let app = TransportAgnosticTPMiddle::new(args, DEVICE_INFOS_NOTIFY);
-    let window = Window::new("MainWindow", app)?;
-    let _devices = Devices::new(&window, &DEVICE_INFOS_NOTIFY, &DEVICE_INFOS_SINK)?;
-
-    hide_console();
-    window.run()
 }
 
 fn main() {

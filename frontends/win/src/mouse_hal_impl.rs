@@ -3,8 +3,8 @@ use winapi::um::winuser::{
     SendInput, INPUT, INPUT_MOUSE, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_WHEEL,
 };
 
-use crate::mouse_hal::MouseHAL;
-use crate::units::{Delta, Wheel};
+use core::mouse_hal::MouseHAL;
+use core::units::{Delta, Wheel};
 
 pub struct MouseHALImpl;
 

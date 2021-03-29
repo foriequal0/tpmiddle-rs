@@ -2,6 +2,14 @@ use std::time::{Duration, Instant};
 
 const MAX_MIDDLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 
+#[derive(Debug)]
+pub enum MiddleButtonEvent {
+    ButtonDown,
+    ButtonUp,
+    Vertical(i8),
+    Horizontal(i8),
+}
+
 pub enum MiddleButtonState {
     Idle,
     MiddleDown { time: Instant },

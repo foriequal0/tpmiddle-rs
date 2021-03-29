@@ -4,18 +4,11 @@ use winapi::shared::minwindef::{LPVOID, UINT};
 use winapi::shared::ntdef::{HANDLE, NULL};
 use winapi::um::winuser::{
     GetRawInputData, GetRawInputDeviceInfoW, HRAWINPUT, RAWHID, RAWINPUT, RAWINPUTHEADER,
-    RIDI_DEVICEINFO, RID_DEVICE_INFO, RID_DEVICE_INFO_HID, RID_INPUT, RIM_TYPEHID,
+    RIDI_DEVICEINFO, RID_DEVICE_INFO, RID_INPUT, RIM_TYPEHID,
 };
 
-use crate::hid::DeviceInfo;
-
-#[derive(Debug)]
-pub enum Event {
-    ButtonDown,
-    ButtonUp,
-    Vertical(i8),
-    Horizontal(i8),
-}
+use core::hid::DeviceInfo;
+use core::middle_button::MiddleButtonEvent;
 
 pub struct EventReader<'a> {
     device_filter: &'a [DeviceInfo],
@@ -80,22 +73,22 @@ impl<'a> EventReader<'a> {
     pub fn read_from_raw_input<'s>(
         &'s mut self,
         l_param: HRAWINPUT,
-    ) -> Result<impl Iterator<Item = Event> + 's, ()> {
+    ) -> Result<impl Iterator<Item = MiddleButtonEvent> + 's, ()> {
         let hid = self.read_hid(l_param)?;
         let result = hid.iter().filter_map(|packet| {
             if packet[0] == 0x15 {
                 if packet[2] & 0x04 != 0x00 {
-                    Some(Event::ButtonDown)
+                    Some(MiddleButtonEvent::ButtonDown)
                 } else {
-                    Some(Event::ButtonUp)
+                    Some(MiddleButtonEvent::ButtonUp)
                 }
             } else if packet[0] == 0x22 || packet[0] == 0x16 {
                 let dx = packet[1] as i8;
                 let dy = packet[2] as i8;
                 if dx != 0 {
-                    Some(Event::Horizontal(dx))
+                    Some(MiddleButtonEvent::Horizontal(dx))
                 } else if dy != 0 {
-                    Some(Event::Vertical(dy))
+                    Some(MiddleButtonEvent::Vertical(dy))
                 } else {
                     warn!("Diagonal is unexpected");
                     None
@@ -109,13 +102,14 @@ impl<'a> EventReader<'a> {
     }
 }
 
-impl From<&RID_DEVICE_INFO_HID> for DeviceInfo {
-    fn from(di: &RID_DEVICE_INFO_HID) -> Self {
-        Self {
-            vendor_id: di.dwVendorId as u16,
-            product_id: di.dwProductId as u16,
-            usage_page: di.usUsagePage as u16,
-            usage: di.usUsage as u16,
+fn device_info_from_rid(di: &RID_DEVICE_INFO) -> DeviceInfo {
+    unsafe {
+        let hid = di.u.hid();
+        DeviceInfo {
+            vendor_id: hid.dwVendorId as u16,
+            product_id: hid.dwProductId as u16,
+            usage_page: hid.usUsagePage as u16,
+            usage: hid.usUsage as u16,
         }
     }
 }
@@ -138,7 +132,7 @@ pub fn get_hid_device_info(handle: HANDLE) -> Result<Option<DeviceInfo>> {
         return Ok(None);
     }
 
-    let device_info = unsafe { DeviceInfo::from(rid_device_info.u.hid()) };
+    let device_info = device_info_from_rid(&rid_device_info);
     Ok(Some(device_info))
 }
 

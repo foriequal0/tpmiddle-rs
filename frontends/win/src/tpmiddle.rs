@@ -2,11 +2,12 @@ use winapi::shared::minwindef::{LPARAM, UINT, WPARAM};
 use winapi::shared::windef::HWND;
 use winapi::um::winuser::{HRAWINPUT, WM_INPUT};
 
-use crate::control::ScrollControl;
-use crate::hid::DeviceInfo;
-use crate::input::{Event, EventReader};
-use crate::middle_button_state::MiddleButtonState;
-use crate::units::{Tick, Wheel};
+use core::control::ScrollControl;
+use core::hid::DeviceInfo;
+use core::middle_button::{MiddleButtonEvent, MiddleButtonState};
+use core::units::{Tick, Wheel};
+
+use crate::event_reader::EventReader;
 use crate::window::{WindowProc, WindowProcError, WindowProcResult};
 
 pub struct TPMiddle {
@@ -46,18 +47,18 @@ impl WindowProc for TPMiddle {
 
         for event in events {
             match event {
-                Event::ButtonDown => self.middle_button_state.down(),
-                Event::ButtonUp => {
+                MiddleButtonEvent::ButtonDown => self.middle_button_state.down(),
+                MiddleButtonEvent::ButtonUp => {
                     self.control.stop();
                     if self.middle_button_state.up() {
                         self.control.middle_click();
                     }
                 }
-                Event::Vertical(dy) => {
+                MiddleButtonEvent::Vertical(dy) => {
                     self.middle_button_state.scroll();
                     self.control.tick(Wheel::Vertical(Tick::from_raw(dy)));
                 }
-                Event::Horizontal(dx) => {
+                MiddleButtonEvent::Horizontal(dx) => {
                     self.middle_button_state.scroll();
                     self.control.tick(Wheel::Horizontal(Tick::from_raw(dx)));
                 }

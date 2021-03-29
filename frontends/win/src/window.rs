@@ -22,7 +22,7 @@ use winapi::um::winuser::{
     RAWINPUTDEVICE, RIDEV_DEVNOTIFY, RIDEV_INPUTSINK, RIDEV_REMOVE, SW_HIDE, WNDCLASSEXW,
 };
 
-use crate::hid::DeviceInfo;
+use core::hid::DeviceInfo;
 
 pub struct Window<T> {
     _class: WindowClass<T>,
