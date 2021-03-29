@@ -1,10 +1,10 @@
 use std::str::FromStr;
 
 use anyhow::*;
-use winapi::shared::minwindef::DWORD;
-use winapi::um::winuser::WHEEL_DELTA;
+use winapi::um::winuser::{MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL};
 
 use crate::input::send_wheel;
+use crate::units::{Delta, Direction, Tick, Wheel};
 
 #[derive(Eq, PartialEq, Copy, Clone)]
 pub enum ScrollControlType {
@@ -34,18 +34,20 @@ impl ScrollControlType {
 }
 
 pub trait ScrollControl {
-    fn scroll(&self, event: DWORD, units: i8);
+    fn tick(&self, tick: Wheel<Tick<i8>>);
     fn stop(&self);
 }
 
 mod classic {
     use super::*;
-
     pub struct ClassicController;
 
     impl ScrollControl for ClassicController {
-        fn scroll(&self, event: DWORD, delta: i8) {
-            send_wheel(event, (delta as i32 * WHEEL_DELTA as i32) as _)
+        fn tick(&self, tick: Wheel<Tick<i8>>) {
+            match tick.into_delta() {
+                Wheel::Vertical(delta) => send_wheel(MOUSEEVENTF_WHEEL, delta.raw() as _),
+                Wheel::Horizontal(delta) => send_wheel(MOUSEEVENTF_HWHEEL, delta.raw() as _),
+            }
         }
 
         fn stop(&self) {}
@@ -85,17 +87,17 @@ mod smooth {
             let join_handle = spawn(move || loop {
                 crossbeam_channel::select! {
                     recv(ticker.receiver) -> _ => {
-                        if let Some(wheel) = state.tick() {
-                            send_wheel(wheel.event, wheel.mouse_data);
-                        } else {
-                            ticker.stop();
+                        match state.tick() {
+                            Some(Wheel::Vertical(delta)) => send_wheel(MOUSEEVENTF_WHEEL, delta.raw() as _),
+                            Some(Wheel::Horizontal(delta)) => send_wheel(MOUSEEVENTF_HWHEEL, delta.raw() as _),
+                            None => ticker.stop(),
                         }
                     }
                     recv(receiver) -> event => {
                         match event {
-                            Ok(Event::Scroll { event, delta }) => {
+                            Ok(Event::Tick(tick)) => {
                                 let now = Instant::now();
-                                if state.feed(now, event, delta) {
+                                if state.feed(now, tick) {
                                     ticker.resume();
                                 }
                             }
@@ -118,10 +120,10 @@ mod smooth {
     }
 
     impl ScrollControl for SmoothController {
-        fn scroll(&self, event: DWORD, delta: i8) {
+        fn tick(&self, tick: Wheel<Tick<i8>>) {
             let sender = self.sender.as_ref().unwrap();
             sender
-                .send(Event::Scroll { event, delta })
+                .send(Event::Tick(tick))
                 .expect("Smooth scrolling thread is dead")
         }
 
@@ -211,15 +213,14 @@ mod smooth {
     }
 
     enum Event {
-        Scroll { event: DWORD, delta: i8 },
+        Tick(Wheel<Tick<i8>>),
         Stop,
     }
 
     #[derive(Debug)]
     enum State {
         Scrolling {
-            event: DWORD,
-            scroll_direction: f32,
+            direction: Wheel<Direction>,
             buffer: f32,
             decay: Decay,
             reservoir: f32,
@@ -230,26 +231,25 @@ mod smooth {
     }
 
     impl State {
-        fn feed(&mut self, now: Instant, event: DWORD, delta: i8) -> bool {
+        fn feed(&mut self, now: Instant, tick: Wheel<Tick<i8>>) -> bool {
             // Empirical feed pattern (number is `delta`)
             // slow scroll  : 1     1     1... >= 100ms interval, up to few seconds.
             // normal scroll: 1  1  1  1  1... <  100ms interval.
             // fast scroll  : 3333333333333... ~= 15ms interval, with greater `delta`
             match self {
                 State::Scrolling {
-                    event: prev_event,
-                    scroll_direction,
+                    direction: prev_dir,
                     buffer,
                     decay,
                     feed_rate,
                     ..
-                } if *prev_event == event && *scroll_direction as i8 == delta.signum() => {
-                    feed_rate.feed(now, delta.abs() as _);
+                } if &tick.into_direction() == prev_dir => {
+                    feed_rate.feed(now, tick.value());
                     // To enable more precise wheel speed control, nudge the delta when the pressure is low,
                     // High pressure -> faster feed rate -> nudge ~ 1.0 (for a narrower range)
                     // Low pressure -> Slower feed rate -> nudge < 1.0 (for a broader range)
                     let nudge = (MIN_FEED_INTERVAL_SECS / feed_rate.interval()).sqrt();
-                    let value = delta.abs() as f32 * nudge;
+                    let value = tick.value().raw().abs() as f32 * nudge;
                     *buffer += value;
                     *decay = Decay::AutomaticExponential;
                     false
@@ -257,9 +257,8 @@ mod smooth {
                 _ => {
                     let initial_nudge = (MIN_FEED_INTERVAL_SECS / MAX_FEED_INTERVAL_SECS).sqrt();
                     *self = State::Scrolling {
-                        event,
-                        scroll_direction: delta.signum() as _,
-                        buffer: delta.abs() as f32 * initial_nudge,
+                        direction: tick.into_direction(),
+                        buffer: tick.value().raw().abs() as f32 * initial_nudge,
                         decay: Decay::AutomaticExponential,
                         reservoir: 0.0,
                         error: 0.0,
@@ -270,11 +269,10 @@ mod smooth {
             }
         }
 
-        fn tick(&mut self) -> Option<WheelTick> {
+        fn tick(&mut self) -> Option<Wheel<Delta>> {
             match *self {
                 State::Scrolling {
-                    event,
-                    scroll_direction,
+                    direction,
                     ref mut buffer,
                     ref mut decay,
                     ref mut reservoir,
@@ -329,23 +327,22 @@ mod smooth {
                     };
                     *reservoir -= amount;
 
-                    let mouse_data = {
-                        let delta_f32 = scroll_direction * amount * WHEEL_DELTA as f32;
-                        let mut delta = delta_f32 as i32;
+                    let delta = {
+                        let ticks = direction.into_tick().value() * amount;
+                        let (mut delta, delta_error) = ticks.into();
 
-                        // accumulate f32 -> i32 rounding errors.
-                        *error += delta_f32 - delta as f32;
+                        *error += delta_error;
                         delta += error.div_euclid(1.0) as i32;
                         *error = error.rem_euclid(1.0);
 
-                        delta as DWORD
+                        delta
                     };
 
                     if *reservoir == 0.0 || amount == 0.0 && *error < 1.0 {
                         *self = State::Nop;
                     }
 
-                    Some(WheelTick { event, mouse_data })
+                    Some(direction.with_value(delta))
                 }
                 State::Nop { .. } => None,
             }
@@ -356,11 +353,6 @@ mod smooth {
     enum Decay {
         Quadratic { amount: f32, decreasing_rate: f32 },
         AutomaticExponential,
-    }
-
-    struct WheelTick {
-        event: DWORD,
-        mouse_data: DWORD,
     }
 
     #[derive(Debug)]
@@ -379,7 +371,7 @@ mod smooth {
             }
         }
 
-        fn feed(&mut self, now: Instant, delta: f32) {
+        fn feed(&mut self, now: Instant, tick: Tick<i8>) {
             const MOVING_AVG_COEFF: f32 = 0.5;
 
             let diff = (now - self.prev).as_secs_f32();
@@ -389,10 +381,11 @@ mod smooth {
                 Some(diff)
             };
 
+            let tick = tick.raw().abs() as _;
             self.value = if let Some(value) = self.value {
-                Some(value * (1.0 - MOVING_AVG_COEFF) + delta * MOVING_AVG_COEFF)
+                Some(value * (1.0 - MOVING_AVG_COEFF) + tick * MOVING_AVG_COEFF)
             } else {
-                Some(delta)
+                Some(tick)
             };
 
             self.prev = now;

@@ -2,11 +2,12 @@ use std::time::{Duration, Instant};
 
 use winapi::shared::minwindef::{LPARAM, UINT, WPARAM};
 use winapi::shared::windef::HWND;
-use winapi::um::winuser::{HRAWINPUT, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_WHEEL, WM_INPUT};
+use winapi::um::winuser::{HRAWINPUT, WM_INPUT};
 
 use crate::control::ScrollControl;
 use crate::hid::DeviceInfo;
 use crate::input::{send_click, Event, EventReader};
+use crate::units::{Tick, Wheel};
 use crate::window::{WindowProc, WindowProcError, WindowProcResult};
 
 const MAX_MIDDLE_CLICK_DURATION: Duration = Duration::from_millis(500);
@@ -71,11 +72,11 @@ impl WindowProc for TPMiddle {
                 }
                 Event::Vertical(dy) => {
                     self.state = State::Scroll;
-                    self.control.scroll(MOUSEEVENTF_WHEEL, dy);
+                    self.control.tick(Wheel::Vertical(Tick::from_raw(dy)));
                 }
                 Event::Horizontal(dx) => {
                     self.state = State::Scroll;
-                    self.control.scroll(MOUSEEVENTF_HWHEEL, dx);
+                    self.control.tick(Wheel::Horizontal(Tick::from_raw(dx)));
                 }
             }
         }
