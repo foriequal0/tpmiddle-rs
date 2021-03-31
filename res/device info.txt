@@ -1,0 +1,41 @@
+Scanned device info:
+
+Bluetooth:
+     VID:PID , PAGE USAGE, "Path"
+    17ef:60e1, 0001 0002, "\\\\?\\hid#{00001812-0000-1000-8000-00805f9b34fb}_dev_vid&0217ef_pid&60e1_rev&0035_f7ba72774d10&col02#9&2b8e113&0&0001#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+        Mouse
+    17ef:60e1, 0001 0006, "\\\\?\\hid#{00001812-0000-1000-8000-00805f9b34fb}_dev_vid&0217ef_pid&60e1_rev&0035_f7ba72774d10&col01#9&2b8e113&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}\\kbd"
+        Keyboard
+    17ef:60e1, 0001 0080, "\\\\?\\hid#{00001812-0000-1000-8000-00805f9b34fb}_dev_vid&0217ef_pid&60e1_rev&0035_f7ba72774d10&col04#9&2b8e113&0&0003#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+    17ef:60e1, 000c 0001, "\\\\?\\hid#{00001812-0000-1000-8000-00805f9b34fb}_dev_vid&0217ef_pid&60e1_rev&0035_f7ba72774d10&col03#9&2b8e113&0&0002#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+        Volume, brightness
+    17ef:60e1, 000c 0001, "\\\\?\\hid#{00001812-0000-1000-8000-00805f9b34fb}_dev_vid&0217ef_pid&60e1_rev&0035_f7ba72774d10&col05#9&2b8e113&0&0004#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+    17ef:60e1, ff00 0001, "\\\\?\\hid#{00001812-0000-1000-8000-00805f9b34fb}_dev_vid&0217ef_pid&60e1_rev&0035_f7ba72774d10&col06#9&2b8e113&0&0005#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+        FnLock, mic mute, Fn+F8-F12
+    17ef:60e1, ff00 0001, "\\\\?\\hid#{00001812-0000-1000-8000-00805f9b34fb}_dev_vid&0217ef_pid&60e1_rev&0035_f7ba72774d10&col08#9&2b8e113&0&0007#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+        Non-native middle button
+    17ef:60e1, ff01 0001, "\\\\?\\hid#{00001812-0000-1000-8000-00805f9b34fb}_dev_vid&0217ef_pid&60e1_rev&0035_f7ba72774d10&col09#9&2b8e113&0&0008#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+    17ef:60e1, ff10 0001, "\\\\?\\hid#{00001812-0000-1000-8000-00805f9b34fb}_dev_vid&0217ef_pid&60e1_rev&0035_f7ba72774d10&col07#9&2b8e113&0&0006#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+        Wheel
+
+Wireless
+     VID:PID , PAGE USAGE, "Path"
+    17ef:60ee, 0001 0002, "\\\\?\\hid#vid_17ef&pid_60ee&mi_01&col01#7&11e85824&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+        Mouse
+    17ef:60ee, 0001 0006, "\\\\?\\hid#vid_17ef&pid_60ee&mi_00#7&11eee59e&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}\\kbd"
+        Keyboard
+    17ef:60ee, 0001 0080, "\\\\?\\hid#vid_17ef&pid_60ee&mi_01&col04#7&11e85824&0&0003#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+        *
+    17ef:60ee, 000c 0001, "\\\\?\\hid#vid_17ef&pid_60ee&mi_01&col03#7&11e85824&0&0002#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+        Volume, brightness, *
+    17ef:60ee, 000c 0001, "\\\\?\\hid#vid_17ef&pid_60ee&mi_01&col07#7&11e85824&0&0006#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+        *
+    17ef:60ee, ff00 0005, "\\\\?\\hid#vid_17ef&pid_60ee&mi_02#7&35bf95e6&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+        *
+    17ef:60ee, ff0a 0005, "\\\\?\\hid#vid_17ef&pid_60ee&mi_01&col02#7&11e85824&0&0001#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+        FnLock, mic mute, Fn+F8-F12, *
+    17ef:60ee, ff10 0001, "\\\\?\\hid#vid_17ef&pid_60ee&mi_01&col06#7&11e85824&0&0005#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+        Wheel, *
+    17ef:60ee, ffa0 0001, "\\\\?\\hid#vid_17ef&pid_60ee&mi_01&col05#7&11e85824&0&0004#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+        Non-native middle button
+    *: HidRawDataWatcher shows data on volume control, brightness control.
