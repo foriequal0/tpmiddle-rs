@@ -58,11 +58,21 @@ impl std::fmt::Debug for DeviceInfo {
     }
 }
 
+const USAGE_PAGE_GENERIC_DESKTOP_CONTROL: u16 = 0x0001;
+const USAGE_GENERIC_DESKTOP_CONTROL_MOUSE: u16 = 0x0002;
+
+const USAGE_PAGE_CONSUMER_PAGE: u16 = 0x000C;
+const USAGE_CONSUMER_PAGE_CONSUMER_CONTROL: u16 = 0x0001;
+
+const USAGE_PAGE_VENDOR1: u16 = 0xFF00;
+const USAGE_PAGE_VENDOR2: u16 = 0xFF10;
+const USAGE_PAGE_VENDOR3: u16 = 0xFFA0;
+
 const DEVICE_INFO_SET_FEATURES_USB: DeviceInfo = DeviceInfo {
     vendor_id: VID_LENOVO,
     product_id: PID_USB,
-    usage_page: 0x0C,
-    usage: 0x01,
+    usage_page: USAGE_PAGE_CONSUMER_PAGE,
+    usage: USAGE_CONSUMER_PAGE_CONSUMER_CONTROL,
 };
 
 const DEVICE_INFO_SET_FEATURES_BT: DeviceInfo = DeviceInfo {
@@ -75,36 +85,36 @@ const DEVICE_INFO_SET_FEATURES_BT: DeviceInfo = DeviceInfo {
 const DEVICE_INFO_MIDDLE_BUTTON_HID_USB: DeviceInfo = DeviceInfo {
     vendor_id: VID_LENOVO,
     product_id: PID_USB,
-    usage_page: 0xFFA0,
+    usage_page: USAGE_PAGE_VENDOR3,
     usage: 0x01,
 };
 
 const DEVICE_INFO_MIDDLE_BUTTON_HID_BT: DeviceInfo = DeviceInfo {
     vendor_id: VID_LENOVO,
     product_id: PID_BT,
-    usage_page: 0xFF00,
+    usage_page: USAGE_PAGE_VENDOR1,
     usage: 0x01,
 };
 
 const DEVICE_INFO_NON_NATIVE_WHEEL_USB: DeviceInfo = DeviceInfo {
     vendor_id: VID_LENOVO,
     product_id: PID_USB,
-    usage_page: 0xFF10,
+    usage_page: USAGE_PAGE_VENDOR2,
     usage: 0x01,
 };
 
 const DEVICE_INFO_NON_NATIVE_WHEEL_BT: DeviceInfo = DeviceInfo {
     vendor_id: VID_LENOVO,
     product_id: PID_BT,
-    usage_page: 0xFF10,
+    usage_page: USAGE_PAGE_VENDOR2,
     usage: 0x01,
 };
 
 pub const DEVICE_INFO_WHEEL_HID_BT: DeviceInfo = DeviceInfo {
     vendor_id: VID_LENOVO,
     product_id: PID_BT,
-    usage_page: 0x01,
-    usage: 0x02,
+    usage_page: USAGE_PAGE_GENERIC_DESKTOP_CONTROL,
+    usage: USAGE_GENERIC_DESKTOP_CONTROL_MOUSE,
 };
 
 pub const DEVICE_INFOS_NOTIFY: &[DeviceInfo] = &[
