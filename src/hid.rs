@@ -1,10 +1,10 @@
-use std::ffi::CStr;
 use std::fmt;
 use std::str::FromStr;
 
 use anyhow::*;
 use hidapi::{HidApi, HidDevice, HidResult};
 use thiserror::*;
+use log::*;
 
 pub const VID_LENOVO: u16 = 0x17EF;
 pub const PID_USB: u16 = 0x60EE;
@@ -174,8 +174,6 @@ pub enum InitializeError {
     HidError(#[from] hidapi::HidError),
     #[error("Cannot find a keyboard over {0}")]
     CannotFindKeyboard(Transport),
-    #[error("Failed to set features while {0}")]
-    CannotSetFeatures(anyhow::Error),
 }
 
 pub fn initialize_keyboard(
@@ -184,26 +182,27 @@ pub fn initialize_keyboard(
     fn_lock: Option<bool>,
 ) -> Result<(), InitializeError> {
     let api = HidApi::new()?;
-    let path = {
-        let mut path = None;
-        for di in api.device_list() {
-            let device_info = DeviceInfo::from(di);
-            if transport == Transport::USB && device_info == DEVICE_INFO_SET_FEATURES_USB
-                || transport == Transport::BT && device_info == DEVICE_INFO_SET_FEATURES_BT
-            {
-                path = Some(di.path().to_owned());
+
+    for di in api.device_list() {
+        let device_info = DeviceInfo::from(di);
+        if transport == Transport::USB && device_info == DEVICE_INFO_SET_FEATURES_USB{
+            match set_keyboard_features::<USB>(&di.open_device(&api)?, sensitivity, fn_lock) {
+                Ok(()) => return Ok(()),
+                Err(err) => {
+                    info!("Failed to set keyboard feature path={path:?}, err={err:?}", path=di.path(), err = err);
+                },
+            }
+        } else if transport == Transport::BT && device_info == DEVICE_INFO_SET_FEATURES_BT
+        {
+            match set_keyboard_features::<BT>(&di.open_device(&api)?, sensitivity, fn_lock) {
+                Ok(()) => return Ok(()),
+                Err(err) => {
+                    info!("Failed to set keyboard feature path={path:?}, err={err:?}", path=di.path(), err = err);
+                },
             }
         }
-        path.ok_or(InitializeError::CannotFindKeyboard(transport))?
-    };
-
-    let result = if let Transport::USB = transport {
-        set_keyboard_features::<USB>(&api, &path, sensitivity, fn_lock)
-    } else {
-        set_keyboard_features::<BT>(&api, &path, sensitivity, fn_lock)
-    };
-
-    result.map_err(InitializeError::CannotSetFeatures)
+    }
+    return Err(InitializeError::CannotFindKeyboard(transport));
 }
 
 trait SetFeatures {
@@ -213,20 +212,17 @@ trait SetFeatures {
 }
 
 fn set_keyboard_features<T: SetFeatures>(
-    api: &HidApi,
-    path: &CStr,
+    device: &HidDevice,
     sensitivity: Option<u8>,
     fn_lock: Option<bool>,
 ) -> Result<()> {
-    let device = &api.open_path(path).context("opening device")?;
-
     if let Some(sensitivity) = sensitivity {
         T::set_sensitivity(&device, sensitivity).context("setting sensitivity")?;
     }
     if let Some(fn_lock) = fn_lock {
         T::set_fn_lock(&device, fn_lock).context("setting fn lock")?;
     }
-    T::set_native_middle_button(&device, false).context("setting native middle button")?;
+    T::set_native_middle_button(&device, false).map_err(|err| anyhow!("cannot set native middle button: {}", err))?;
     Ok(())
 }
 
