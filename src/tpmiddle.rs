@@ -9,10 +9,10 @@ use crate::hid::DeviceInfo;
 use crate::input::{send_click, Event, EventReader};
 use crate::window::{WindowProc, WindowProcError, WindowProcResult};
 
-const MAX_MIDDLE_CLICK_DURATION: Duration = Duration::from_millis(50);
+const MAX_MIDDLE_CLICK_DURATION: Duration = Duration::from_millis(500);
 
 enum State {
-    MiddleUp,
+    Idle,
     MiddleDown { time: Instant },
     Scroll,
 }
@@ -26,7 +26,7 @@ pub struct TPMiddle {
 impl TPMiddle {
     pub fn new(device_filter: &'static [DeviceInfo], control: Box<dyn ScrollControl>) -> Self {
         TPMiddle {
-            state: State::MiddleUp,
+            state: State::Idle,
             control,
             event_reader: EventReader::new(device_filter),
         }
@@ -67,9 +67,10 @@ impl WindowProc for TPMiddle {
                             send_click(3);
                         }
                     }
-                    self.state = State::MiddleUp;
+                    self.state = State::Idle;
                 }
                 Event::Vertical(dy) => {
+                    self.state = State::Scroll;
                     self.control.scroll(MOUSEEVENTF_WHEEL, dy);
                 }
                 Event::Horizontal(dx) => {
