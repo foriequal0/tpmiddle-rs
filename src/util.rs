@@ -68,7 +68,7 @@ macro_rules! c_try_ne_unsafe {
 #[macro_export]
 macro_rules! c_try_ne {
     ($x: expr, $expr:expr) => {
-        unsafe { c_try_ne_unsafe!($x, $expr) }
+        unsafe { $crate::c_try_ne_unsafe!($x, $expr) }
     };
 }
 
